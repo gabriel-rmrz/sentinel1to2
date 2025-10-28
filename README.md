@@ -1,3 +1,7 @@
+## sentinel1to2
+Translates images from Sentinel 1 to Sentinel 2
+### Instructions
+source scripts/setup/setup_python_env.sh
 ### TODO
 - write a wraper
   - Chose model

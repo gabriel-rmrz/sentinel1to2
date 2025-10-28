@@ -9,12 +9,12 @@ from tools.scene_split_dataset import scene_split_dataset
 from models.losses.CombinedLoss import CombinedLoss
 from batch_run_inference import batch_run_inference
 from process_scenes import process_scenes
-
+from performance import performance
 
 def main():
   do_training = False
   do_evaluation = False
-  do_inference = False 
+  do_inference = False
   do_performance = True
   # Configurazioni
   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -92,6 +92,7 @@ def main():
     data_dir = "data/inference"
     pred_dir = "data/output_combined"
     results = process_scenes(data_dir, pred_dir)
+    performance()
 
 if __name__=='__main__':
   main()
