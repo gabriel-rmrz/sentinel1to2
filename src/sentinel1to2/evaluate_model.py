@@ -17,6 +17,10 @@ import skimage.metrics
 """
 
 KKK = 0 
+# TODO: Add evaluation for the test sample as well.
+# Add input bands to the config.
+
+
 def evaluate_model(model, device, val_loader, num_samples=5):
     
   model.eval()

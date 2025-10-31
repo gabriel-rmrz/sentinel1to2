@@ -2,19 +2,24 @@
 
 preprocessing:
   patch_dimension: [128,128]
-training:
+
+data_loader:
   batch_size: 4
-  n_workers: 4
-  input_dataset_name: "data/train_dataset_S2.h5"
+  n_workers: 0 
+
+model:
+  #name: "UNet"
+  name: "SMP_UNet"
+  parameters:
+    encoder_name: "efficientnet-b0"
+    encoder_weights: "imagenet"
+    in_channels: 4
+    classes: 9
+training:
+  train_dataset: "data/train_dataset_S2.h5"
+  val_dataset: "data/val_dataset_S2.h5"
   output_dir: "data/output_combined/"
-  model:
-    name: "UNet"
-    parameters:
-      encoder_name: "efficientnet-b0"
-      encoder_weights: "imagenet"
-      in_channels: 4
-      classes: 9
-      path: "best_model.pth" # Path to the output model file.
+  output_path_model: "best_model.pth" # Path to the output model file.
   optimizer: 
     name: "Adam"
     parameters:

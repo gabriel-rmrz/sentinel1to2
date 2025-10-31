@@ -54,6 +54,6 @@ def train_model(model, device,  train_loader, val_loader, criterion, optimizer, 
     
     if no_improve >= patience:
       print(f'Early stopping at epoch {epoch+1}')
-      break
+      return train_losses, val_losses
   
   return train_losses, val_losses
