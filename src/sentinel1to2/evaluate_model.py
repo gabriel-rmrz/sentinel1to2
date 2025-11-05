@@ -6,16 +6,6 @@ import torchvision.transforms.functional as TF
 import skimage.metrics
 
 
-"""
-0 np.clip(ndvi, -1, 1),
-1 np.clip(gndvi, -1, 1),
-2 np.clip(ndre, -1, 1),
-3 np.clip(reci, -1, 10),   # oppure anche (0, 10) se RECI < 0 non ha senso
-4 np.clip(msi, 0, 10),
-5 np.clip(ndwi, -1, 1),
-6 np.clip(evi, 0, 2),
-"""
-
 KKK = 0 
 # TODO: Add evaluation for the test sample as well.
 # Add input bands to the config.

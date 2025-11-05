@@ -6,6 +6,7 @@ def get_real_scenes(real_dir):
   pattern = re.compile(r"(\d+)_(\d+)")
   for folder in os.listdir(real_dir):
     match = pattern.match(folder)
+    print(f"match.group(): {match.group()}")
     if match:
       scene, day = match.groups()
       full_path = os.path.join(real_dir, folder, f"{day}_s2.tif")

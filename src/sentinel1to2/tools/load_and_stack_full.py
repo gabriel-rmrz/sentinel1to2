@@ -45,7 +45,6 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
 
   # === Indici Spettrali ===
   ndvi = (nir - red) / (nir + red + eps)
-  """
   gndvi = (nir - green) / (nir + green + eps)
   ndre = (nir - rededge) / (nir + rededge + eps)
   reci = (nir / (rededge + eps)) - 1
@@ -58,26 +57,25 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
   bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
   ndsi = (green - swir) / (green + swir + eps)
   mcari = [(b5 - red) - 0.2*(b5 - green)] * (b5 / red)
-  """
 
-  indices = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  #np.stack([
-     #np.clip(ndvi, -1, 1) #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
-     #np.clip(gndvi, -1, 1),
-     #np.clip(ndre, -1, 1),
-     #np.clip(reci, -1, 10),
-     #np.clip(msi, 0, 10),
-     #np.clip(ndwi, -1, 1),
-     #np.clip(evi, 0, 2),
-     #np.clip(savi, -1, 1),
-     #np.clip(arvi, -1, 1),
-     #np.clip(cire, 0, 10),
-     #np.clip(bsi, -1, 1),
-     #np.clip(ndsi, -1, 1),
-     #np.clip(mcari, 0, 10)
-  #], axis=0).astype(np.float32)
+  s2_selected  = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
+  indices = np.stack([
+     np.clip(ndvi, -1, 1), #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
+     np.clip(gndvi, -1, 1),
+     np.clip(ndre, -1, 1),
+     np.clip(reci, -1, 10),
+     np.clip(msi, 0, 10),
+     np.clip(ndwi, -1, 1),
+     np.clip(evi, 0, 2),
+     np.clip(savi, -1, 1),
+     np.clip(arvi, -1, 1),
+     np.clip(cire, 0, 10),
+     np.clip(bsi, -1, 1),
+     np.clip(ndsi, -1, 1),
+     np.clip(mcari, 0, 10)
+  ], axis=0).astype(np.float32)
 
 
   #print(f"[{folder}] target min/max:", indices.min(), indices.max())
 
-  return dsm, s1, worldcover, indices, profile
+  return dsm, s1, worldcover, s2_selected, indices, profile

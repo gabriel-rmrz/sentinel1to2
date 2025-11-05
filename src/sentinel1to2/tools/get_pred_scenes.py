@@ -5,6 +5,8 @@ import re
 def get_pred_scenes(pred_dir):
   scene_dict = {}
   pattern = re.compile(r"(\d+)_(\d+)_pred\.tif")
+  #pattern = re.compile(r"(\d+)_(\d+)")
+
   for fname in os.listdir(pred_dir):
     match = pattern.match(fname)
     if match:

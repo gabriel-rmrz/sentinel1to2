@@ -179,15 +179,17 @@ def main() -> None:
   if "inference" in steps.values():
     batch_run_inference(
       model_path="best_model.pth",
-      data_dir="data/inference/",
+      data_dir="data/test/",
       output_dir="data/output_combined/",
       device="cpu"
     )
   if "performance" in steps.values():
-    data_dir = "data/inference"
     pred_dir = "data/output_combined"
-    results = process_scenes(data_dir, pred_dir)
-    performance()
+    data_dir = "data/test"
+    
+    # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
+    # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
+    performance(data_dir, pred_dir)
   
   return
 
