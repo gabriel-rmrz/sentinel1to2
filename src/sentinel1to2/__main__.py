@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 
 from torch.utils.data import DataLoader, random_split
+from .prepare_input_data import prepare_input_data
 from .train_model import train_model
 from .evaluate_model import evaluate_model
 from .tools.scene_split_dataset import scene_split_dataset
@@ -117,6 +118,8 @@ def main() -> None:
   learning_rate = 1e-4
   n_workers = 4
   
+  if "preprocessing" in steps.values():
+    prepare_input_data()
   # Caricamento dataset
   train_dataset = scene_split_dataset(config["training"]["train_dataset"])
   val_dataset = scene_split_dataset(config["training"]["val_dataset"])

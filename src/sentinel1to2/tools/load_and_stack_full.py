@@ -56,7 +56,7 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
   cire = nir / (rededge + eps)
   bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
   ndsi = (green - swir) / (green + swir + eps)
-  mcari = [(b5 - red) - 0.2*(b5 - green)] * (b5 / red)
+  #mcari = [(b5 - red) - 0.2*(b5 - green)] * (b5 / red)
 
   s2_selected  = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
   indices = np.stack([
@@ -72,7 +72,7 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
      np.clip(cire, 0, 10),
      np.clip(bsi, -1, 1),
      np.clip(ndsi, -1, 1),
-     np.clip(mcari, 0, 10)
+     #np.clip(mcari, 0, 10)
   ], axis=0).astype(np.float32)
 
 

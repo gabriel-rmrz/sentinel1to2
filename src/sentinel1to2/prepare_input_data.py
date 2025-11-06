@@ -1,9 +1,13 @@
+import os
 import numpy as np
+from tqdm import tqdm
 import h5py
 
+from sklearn.model_selection import train_test_split
+from .tools.process_scene import process_scene
 
-def main():
-  data_dir = "/lustrehome/cilli/agri2intesa/s1_to_s2/train/"
+def prepare_input_data():
+  data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
   all_folders = sorted([f for f in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, f))])
   
   # Split scena
@@ -36,19 +40,16 @@ def main():
 
   
   # Step 3: crea HDF5 train definitivo normalizzato
-  with h5py.File('train_dataset_S2.h5', 'w') as hf:
+  with h5py.File('data/train_dataset_S2.h5', 'w') as hf:
     metadata_grp = hf.create_group("metadata")
     metadata_grp.create_dataset("scene_list", data=np.array(train_folders, dtype='S'))
     for folder in tqdm(train_folders, desc="Writing normalized training scenes"):
       process_scene(folder, data_dir, hf, mean=mean, std=std)
 
   # Step 4: crea HDF5 val usando stessi parametri
-  with h5py.File('val_dataset_S2.h5', 'w') as hf:
+  with h5py.File('data/val_dataset_S2.h5', 'w') as hf:
     metadata_grp = hf.create_group("metadata")
     metadata_grp.create_dataset("scene_list", data=np.array(val_folders, dtype='S'))
     for folder in tqdm(val_folders, desc="Writing normalized validation scenes"):
       process_scene(folder, data_dir, hf, mean=mean, std=std)
 
-
-if __name__ == "__main__":
-    main()
