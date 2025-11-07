@@ -13,7 +13,7 @@ from .evaluate_model import evaluate_model
 from .tools.scene_split_dataset import scene_split_dataset
 from .models.losses.CombinedLoss import CombinedLoss
 from .batch_run_inference import batch_run_inference
-from .process_scenes import process_scenes
+#from .process_scenes import process_scenes
 from .performance import performance
 
 def check_step_requirements():
@@ -140,7 +140,6 @@ def main() -> None:
       pin_memory= torch.cuda.is_available()
     )
 
-  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
   model = model.to(device)
   print(steps)
   if 'training' in steps.values():
@@ -151,7 +150,6 @@ def main() -> None:
       num_workers=config["data_loader"]["n_workers"],
       pin_memory=torch.cuda.is_available()
     )
-    print(device)
     print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
     #model = UNet(in_channels=4, init_features=32, out_channels=1).to(device)
     #model =  EffUNet(in_channels=6, classes=1)
@@ -164,9 +162,11 @@ def main() -> None:
     #criterion = CombinedLoss(alpha=1.0, beta=2, gamma=0.1)
     
     # Addestramento
+    # TODO: epochs and patience are not necessary if we have the cofig (?)
     train_losses, val_losses = train_model(
       model,
       device,
+      config,
       train_loader,
       val_loader,
       criterion,
@@ -177,14 +177,15 @@ def main() -> None:
     print(f"Training finished")
   if "evaluation" in steps.values():
     if not "training" in steps.values():
-      model.load_state_dict(torch.load("best_model.pth"))
+      model.load_state_dict(torch.load(config["training"]["model_output_path"]))
     evaluate_model(model, device, val_loader, num_samples= 100000)
   if "inference" in steps.values():
+    # TODO: use the cofig as parameter instead of the model_path, data_dir
     batch_run_inference(
       model_path="best_model.pth",
       data_dir="data/test/",
       output_dir="data/output_combined/",
-      device="cpu"
+      device=device
     )
   if "performance" in steps.values():
     pred_dir = "data/output_combined"

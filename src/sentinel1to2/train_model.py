@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import mean_squared_error
 
-def train_model(model, device,  train_loader, val_loader, criterion, optimizer, epochs=100, patience=5):
+def train_model(model, device, config,  train_loader, val_loader, criterion, optimizer, epochs=100, patience=5):
   best_val_loss = np.inf
   no_improve = 0
   train_losses = []
@@ -45,7 +45,7 @@ def train_model(model, device,  train_loader, val_loader, criterion, optimizer, 
     if val_loss < best_val_loss:
       best_val_loss = val_loss
       no_improve = 0
-      torch.save(model.state_dict(), 'best_model.pth')
+      torch.save(model.state_dict(), config["training"]["model_output_path"])
     else:
       no_improve += 1
         

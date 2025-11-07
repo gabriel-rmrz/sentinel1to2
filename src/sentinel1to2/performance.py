@@ -49,10 +49,10 @@ def compute_vegetation_indices(s2):
   cire = nir / (rededge + eps)
   bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
   ndsi = (green - swir) / (green + swir + eps)
-  #mcari = [(b5 - red) - 0.2*(b5 - green)] * (b5 / red)
-  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cire", "bsi", "ndsi"]
+  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
+  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cire", "bsi", "ndsi", "mcari"]
 
-  #indices = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
+  #s2_selected = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
   #print(np.clip(mcari, 0, 10).shape)
   indices = np.stack([
       np.clip(ndvi, -1, 1), #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
@@ -67,7 +67,7 @@ def compute_vegetation_indices(s2):
       np.clip(cire, 0, 10),
       np.clip(bsi, -1, 1),
       np.clip(ndsi, -1, 1),
-  #    np.clip(mcari, 0, 10)
+      np.clip(mcari, 0, 10)
   ], axis=0).astype(np.float32)
 
   return indices, ind_names 
