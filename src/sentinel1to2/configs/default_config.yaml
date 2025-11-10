@@ -19,7 +19,7 @@ training:
   train_dataset: "data/train_dataset_S2.h5"
   val_dataset: "data/val_dataset_S2.h5"
   output_dir: "data/output_combined/"
-  output_path_model: "trained_models/best_model.pth" # Path to the output model file.
+  model_output_path: "trained_models/best_model.pth" # Path to the output model file.
   optimizer: 
     name: "Adam"
     parameters:
