@@ -3,11 +3,13 @@ import csv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 from skimage.metrics import peak_signal_noise_ratio
 from skimage.metrics import structural_similarity  
 from sklearn.metrics import r2_score
 from itertools import combinations
 from tqdm import tqdm
+from .tools.compute_vegetation_indices import compute_vegetation_indices
 from .tools.load_image import load_image
 from .tools.load_predicted_ndvi import load_predicted_ndvi
 from .tools.get_pred_scenes import get_pred_scenes
@@ -16,61 +18,6 @@ from .tools.r2_by_class import r2_by_class
 from .plotting.scatter_with_r2 import scatter_with_r2
 from .plotting.scatter_with_r2_by_class import scatter_with_r2_by_class
 
-def compute_vegetation_indices(s2):
-  """
-  inputs:
-    s2: We are considering only the bands relevants for our pipeline. If we have all sentinel bands, we are suposed to filter
-        leaving only the 'selected' band defined below:
-          band_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
-          selected_bands = [1,2,3,4,5,6,7,10,11]
-          
-  """
-
-  # Bande Sentinel-2 standardizzate
-  blue   = s2[0]  # B2
-  green  = s2[1]  # B3
-  red    = s2[2]  # B4
-  b5 = s2[3]  # B5
-  rededge = s2[4] # B6
-  nir    = s2[6]  # B8
-  swir   = s2[8] # B12
-
-  eps = 1e-6
-  # === Indici Spettrali ===
-  ndvi = (nir - red) / (nir + red + eps)
-  gndvi = (nir - green) / (nir + green + eps)
-  ndre = (nir - rededge) / (nir + rededge + eps)
-  reci = (nir / (rededge + eps)) - 1
-  msi = swir / (nir + eps)
-  ndwi = (green - nir) / (green + nir + eps)
-  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-  cire = nir / (rededge + eps)
-  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-  ndsi = (green - swir) / (green + swir + eps)
-  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cire", "bsi", "ndsi", "mcari"]
-
-  #s2_selected = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  #print(np.clip(mcari, 0, 10).shape)
-  indices = np.stack([
-      np.clip(ndvi, -1, 1), #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
-      np.clip(gndvi, -1, 1),
-      np.clip(ndre, -1, 1),
-      np.clip(reci, -1, 10),
-      np.clip(msi, 0, 10),
-      np.clip(ndwi, -1, 1),
-      np.clip(evi, 0, 2),
-      np.clip(savi, -1, 1),
-      np.clip(arvi, -1, 1),
-      np.clip(cire, 0, 10),
-      np.clip(bsi, -1, 1),
-      np.clip(ndsi, -1, 1),
-      np.clip(mcari, 0, 10)
-  ], axis=0).astype(np.float32)
-
-  return indices, ind_names 
 
 def compute_metrics(img_gt, img_inf):
   mae = np.abs(img_inf - img_gt).mean()
@@ -97,12 +44,57 @@ def plot_histos_from_df(df, metric_names, prefix):
     hist_vars = df["band"].unique()
     var_type = "band"
 
-  for hv in hist_vars:
-    for mn in metric_names:
+  means_df = pd.DataFrame(columns=["hist_vars","metric","mean", "std"])
+  for mn in metric_names:
+    for hv in hist_vars:
       fig, ax = plt.subplots()
       df[df[var_type] ==hv].hist(mn, ax=ax)
+      means_df.loc[-1] = [mn, hv , df[df[var_type] ==hv][mn].mean(), df[df[var_type] ==hv][mn].std()]
+      means_df.index = means_df.index + 1
+      means_df = means_df.sort_index()
       fig.savefig(f"plots/metrics/histos/{prefix}_{hv}_{mn}.png")
       plt.close(fig)
+  means_df.to_csv(f"tables/{prefix}_means.csv", index=False)
+  save_to_latex(means_df, prefix)
+
+def save_to_latex(df, prefix):
+  # Assuming df has columns: hist_vars | metric | mean | std
+  wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
+  wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
+  
+  order = ["mae", "psnr", "ssim", "r2"]
+  cols = pd.MultiIndex.from_product([order, ["mean", "std"]])
+  wide = wide.reindex(columns=cols)
+  
+  # Optional: hide index name
+  wide.index.name = ""
+  
+  # --- Here’s where the vertical lines magic happens ---
+  column_format = "|l|rr|rr|rr|rr|"
+  
+  latex = wide.to_latex(
+      index=True,
+      multicolumn=True,
+      multicolumn_format="c",
+      float_format=lambda x: f"{x:.3f}",
+      column_format=column_format,
+      caption="Results summary",
+      label="tab:results",
+  )
+  # assume `latex` is the string from wide.to_latex(...)
+  # 1) vertical bars around each 2-col group in the header
+  latex = latex.replace(r"\multicolumn{2}{c}{", r"\multicolumn{2}{|c|}{")
+  
+  # 2) use a tabular preamble with bars between groups
+  latex = latex.replace(r"\begin{tabular}{l", r"\begin{tabular}{|l|rr|rr|rr|rr|}")
+  
+  # 3) if you used booktabs, swap to \hline so bars are drawn
+  latex = (latex.replace(r"\toprule", r"\hline")
+              .replace(r"\midrule", r"\hline")
+              .replace(r"\bottomrule", r"\hline"))
+  
+  Path(f"tables/{prefix}_means.tex").write_text(latex)
+
 
 def plot_histo_2d(indices, names, scene, prefix):
   for i in range(indices.shape[0]):
@@ -145,13 +137,13 @@ def performance(real_dir, pred_dir):
     indices (GT) vs indices (I)
   """
   # === CONFIG ===
-  #pred_dir = "data/output_combined/"
-  #pred_ndvi_dir = "data/output"
-  #real_dir = "data/test"
+  pred_dir = "data/output_combined/"
+  pred_ndvi_dir = "data/output"
+  real_dir = "data/test"
 
-  pred_dir = "data/output_combined_bkup/"
-  pred_ndvi_dir = "data/output_bkup"
-  real_dir = "data/test_bkup"
+  #pred_dir = "data/output_combined_bkup/"
+  #pred_ndvi_dir = "data/output_bkup"
+  #real_dir = "data/test_bkup"
 
   output_dir = "data/output_performance/"
   os.makedirs(output_dir, exist_ok=True)
@@ -202,6 +194,7 @@ def performance(real_dir, pred_dir):
       # put the indices in the config file
       ind_from_gt, ind_names_from_gt = compute_vegetation_indices(s2_gt)
       ind_from_inf, ind_names_from_inf = compute_vegetation_indices(s2_inf)
+      '''
       """
       Plot 2D hitograms for the indices
         ind_from_gt
@@ -228,7 +221,7 @@ def performance(real_dir, pred_dir):
       plot_abs_error(s2_gt, s2_inf, band_names, dname, prefix="s2_gt_vs_inf")
       plot_abs_error(np.array([ind_from_gt[0,:,:]]), np.array([ndvi_inf]), ['ndvi'], dname, prefix="ndvi_gt_vs_inf")
 
-
+      '''
 
       """
       compute_metrics() method, from:
@@ -244,17 +237,18 @@ def performance(real_dir, pred_dir):
     except Exception as e:
       print(f"[ERROR] Error for the scene {dname}: {e}")
   
-  '''
   print(gt_vs_inf_df)
   prefix = "gt_vs_inf"
+  gt_vs_inf_df.to_csv(f"tables/{prefix}.csv", index=False)
   plot_histos_from_df(gt_vs_inf_df, metric_names,prefix)
   print(gt_vs_comp_df)
   prefix = "gt_vs_comp"
+  gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
   plot_histos_from_df(gt_vs_comp_df, metric_names,prefix)
   print(gt_vs_inf_ndvi_df)
   prefix = "gt_vs_inf_ndvi"
+  gt_vs_inf_ndvi_df.to_csv(f"tables/{prefix}.csv", index=False)
   plot_histos_from_df(gt_vs_inf_ndvi_df, metric_names,prefix)
-  '''
 
 
   same_day_comparison = False
