@@ -123,6 +123,8 @@ def main() -> None:
   # Caricamento dataset
   train_dataset = scene_split_dataset(config["training"]["train_dataset"])
   val_dataset = scene_split_dataset(config["training"]["val_dataset"])
+  print(len(train_dataset))
+  print(len(val_dataset))
   
   model = get_model(config)
   #print(model)
@@ -130,7 +132,7 @@ def main() -> None:
   # TODO: Put the 3 data_loaders in a function 
   # DataLoaders
   val_loader, train_loader = None, None
-  if "training" in steps.values() or "evaluation" in steps.values():
+  if "training" in steps.values() or "evaluation" in steps.values() or "inference" in steps.values():
     val_loader = DataLoader(
       val_dataset,
       batch_size=config["data_loader"]["batch_size"],
@@ -144,8 +146,7 @@ def main() -> None:
   print(steps)
   if 'training' in steps.values():
     train_loader = DataLoader(
-      train_dataset,
-      batch_size=config["data_loader"]["batch_size"],
+      train_dataset, batch_size=config["data_loader"]["batch_size"],
       shuffle=True,
       num_workers=config["data_loader"]["n_workers"],
       pin_memory=torch.cuda.is_available()
@@ -171,16 +172,26 @@ def main() -> None:
       val_loader,
       criterion,
       optimizer,
-      epochs=50,
-      patience=10
+      epochs=2,
+      patience=1
     )
     print(f"Training finished")
   if "evaluation" in steps.values():
     if not "training" in steps.values():
       model.load_state_dict(torch.load(config["training"]["model_output_path"]))
-    evaluate_model(model, device, val_loader, num_samples= 100000)
+    evaluate_model(model, config, device, val_loader, num_samples= 100000)
   if "inference" in steps.values():
     # TODO: use the cofig as parameter instead of the model_path, data_dir
+    '''
+    batch_run_inference(
+      model_path="best_model.pth",
+      data_dir="data/train/",
+      output_dir="data/output_combined/",
+      loader=val_loader,
+      device=device,
+      prefix='val'
+    )
+    '''
     batch_run_inference(
       model_path="best_model.pth",
       data_dir="data/test/",

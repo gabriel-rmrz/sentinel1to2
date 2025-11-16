@@ -8,6 +8,7 @@ from .tools.process_scene import process_scene
 
 def prepare_input_data():
   #data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
+  #data_dir = "/Users/garamire/Work/AgriIntesa/sentinel1to2/src/sentinel1to2/data/train_bkup/"
   data_dir = "/Users/garamire/Work/AgriIntesa/sentinel1to2/src/sentinel1to2/data/train/"
   all_folders = sorted([f for f in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, f))])
   
@@ -34,10 +35,10 @@ def prepare_input_data():
   # Salva i parametri per futuro uso
   np.savez("normalization_params.npz", mean=mean, std=std)
   """
-  
   params = np.load("normalization_params.npz")
   mean = params["mean"] 
   std =  params["std"]
+  
 
   
   # Step 3: crea HDF5 train definitivo normalizzato

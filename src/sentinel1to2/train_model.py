@@ -14,7 +14,7 @@ def train_model(model, device, config,  train_loader, val_loader, criterion, opt
     epoch_train_loss = 0.0
     
     # Training
-    for inputs, targets in train_loader:
+    for inputs, targets, _scene, _patch_idx in train_loader:
       inputs, targets = inputs.to(device), targets.to(device)
       
       optimizer.zero_grad()
@@ -29,7 +29,7 @@ def train_model(model, device, config,  train_loader, val_loader, criterion, opt
     model.eval()
     epoch_val_loss = 0.0
     with torch.no_grad():
-      for inputs, targets in val_loader:
+      for inputs, targets, _scene, _patch_idx in val_loader:
         inputs, targets = inputs.to(device), targets.to(device)
         outputs = model(inputs)
         loss = criterion(outputs, targets)

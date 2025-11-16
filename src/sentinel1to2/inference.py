@@ -7,7 +7,7 @@ from .tools.infer_on_scene import infer_on_scene
 from .tools.save_geotiff import save_geotiff
 from .tools.load_and_stack_full import load_and_stack_full
 
-def inference(scene_folder, model_path, data_dir, output_dir, device='cuda'):
+def inference(scene_folder, model_path, data_dir, output_dir, device='cuda', prefix='test'):
     # === Normalizzazione ===
     norm_params = np.load("normalization_params.npz")
     MEAN = norm_params["mean"]
@@ -29,6 +29,6 @@ def inference(scene_folder, model_path, data_dir, output_dir, device='cuda'):
 
     # Salva TIFF
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, f"{scene_folder}_pred.tif")
+    out_path = os.path.join(output_dir, f"{prefix}_{scene_folder}_pred.tif")
     save_geotiff(output, profile, out_path)
     print(f"✅ Output salvato in: {out_path}")

@@ -34,8 +34,9 @@ def compute_vegetation_indices(s2):
   bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
   ndsi = (green - swir) / (green + swir + eps)
   mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-  msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
-  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
+  #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
+  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
+  #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
 
   #s2_selected = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
   #print(np.clip(mcari, 0, 10).shape)
@@ -55,7 +56,7 @@ def compute_vegetation_indices(s2):
       np.clip(bsi, -1, 1),
       np.clip(ndsi, -1, 1),
       np.clip(mcari, 0, 10),
-      np.clip(msavi, -1, 1)
+      #np.clip(msavi, -1, 1)
   ], axis=0).astype(np.float32)
 
   return indices, ind_names 

@@ -30,4 +30,4 @@ class scene_split_dataset(Dataset):
     with h5py.File(self.hdf5_path, 'r') as hf:
       inputs = torch.from_numpy(hf[f'scene_{scene}/inputs'][patch_idx])
       targets = torch.from_numpy(hf[f'scene_{scene}/targets'][patch_idx])
-    return inputs, targets
+    return inputs, targets, scene, patch_idx

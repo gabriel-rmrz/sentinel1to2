@@ -3,62 +3,6 @@ import numpy as np
 import rasterio
 from .compute_vegetation_indices import compute_vegetation_indices
 
-'''
-def compute_vegetation_indices(s2):
-  """
-  inputs:
-    s2: We are considering only the bands relevants for our pipeline. If we have all sentinel bands, we are suposed to filter
-        leaving only the 'selected' band defined below:
-          band_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
-          selected_bands = [1,2,3,4,5,6,7,10,11]
-  """
-  # Bande Sentinel-2 standardizzate
-  blue   = s2[0]  # B2
-  green  = s2[1]  # B3
-  red    = s2[2]  # B4
-  b5 = s2[3]  # B5
-  rededge = s2[4] # B6
-  nir    = s2[6]  # B8
-  swir   = s2[8] # B12
-
-  eps = 1e-6
-  # === Indici Spettrali ===
-  ndvi = (nir - red) / (nir + red + eps)
-  gndvi = (nir - green) / (nir + green + eps)
-  ndre = (nir - rededge) / (nir + rededge + eps)
-  reci = (nir / (rededge + eps)) - 1
-  msi = swir / (nir + eps)
-  ndwi = (green - nir) / (green + nir + eps)
-  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-  cire = nir / (rededge + eps)
-  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-  ndsi = (green - swir) / (green + swir + eps)
-  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cire", "bsi", "ndsi", "mcari"]
-
-  #s2_selected = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  #print(np.clip(mcari, 0, 10).shape)
-  indices = np.stack([
-      np.clip(ndvi, -1, 1), #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
-      np.clip(gndvi, -1, 1),
-      np.clip(ndre, -1, 1),
-      np.clip(reci, -1, 10),
-      np.clip(msi, 0, 10),
-      np.clip(ndwi, -1, 1),
-      np.clip(evi, 0, 2),
-      np.clip(savi, -1, 1),
-      np.clip(arvi, -1, 1),
-      np.clip(cire, 0, 10),
-      np.clip(bsi, -1, 1),
-      np.clip(ndsi, -1, 1),
-      np.clip(mcari, 0, 10)
-  ], axis=0).astype(np.float32)
-
-  return indices, ind_names 
-'''
- 
 def load_and_stack_full(folder, data_dir, MEAN, STD):
   base_name = folder.split("_")[1]
 
@@ -71,19 +15,22 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
 
   # === DSM ===
   with rasterio.open(paths['dsm']) as src:
-    dsm = src.read(1)[np.newaxis, ...].astype(np.float32)
-    dsm = (dsm - MEAN[0, None, None]) / STD[0, None, None]
+    dsm = src.read(1).astype(np.float32)[np.newaxis, ...]
+    dsm = (dsm - MEAN[0]) / STD[0]
     profile = src.profile
 
   # === Sentinel-1 (es. VV, VH) ===
   with rasterio.open(paths['s1']) as src:
-    s1 = src.read((3, 4)).astype(np.float32)  # Assumendo canali 3=VV, 4=VH
+    s1 = src.read((3, 4)).astype(np.float32)  # bands VV/VH
+    s1 = np.nan_to_num(s1, nan=0.0, posinf=0.0, neginf=0.0)
     s1 = (s1 - MEAN[1:3, None, None]) / STD[1:3, None, None]
 
   # === WorldCover ===
   with rasterio.open(paths['worldcover']) as src:
-    worldcover = src.read(1)[np.newaxis, ...].astype(np.float32)
-    worldcover = (worldcover - MEAN[3, None, None]) / STD[3, None, None]
+    wc = src.read(1).astype(np.float32)[np.newaxis, ...]
+    wc = (wc - MEAN[3]) / STD[3]
+
+
 
   # === Sentinel-2 ===
   with rasterio.open(paths['s2']) as src:
@@ -96,4 +43,4 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
 
   #print(f"[{folder}] target min/max:", indices.min(), indices.max())
 
-  return dsm, s1, worldcover, s2_selected, indices, profile
+  return dsm, s1, wc, s2_selected, indices, profile

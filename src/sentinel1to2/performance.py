@@ -9,6 +9,7 @@ from skimage.metrics import structural_similarity
 from sklearn.metrics import r2_score
 from itertools import combinations
 from tqdm import tqdm
+from .tools.produce_outputs_from_df import produce_outputs_from_df
 from .tools.compute_vegetation_indices import compute_vegetation_indices
 from .tools.load_image import load_image
 from .tools.load_predicted_ndvi import load_predicted_ndvi
@@ -36,66 +37,6 @@ def compute_all_metrics(df, scene_name, g_truth, inference, names):
      df = df.sort_index()
    return df
 
-def plot_histos_from_df(df, metric_names, prefix):
-  if "veg_index" in df.keys():
-    hist_vars = df["veg_index"].unique()  
-    var_type = "veg_index"
-  elif "band" in df.keys():
-    hist_vars = df["band"].unique()
-    var_type = "band"
-
-  means_df = pd.DataFrame(columns=["hist_vars","metric","mean", "std"])
-  for mn in metric_names:
-    for hv in hist_vars:
-      fig, ax = plt.subplots()
-      df[df[var_type] ==hv].hist(mn, ax=ax)
-      means_df.loc[-1] = [mn, hv , df[df[var_type] ==hv][mn].mean(), df[df[var_type] ==hv][mn].std()]
-      means_df.index = means_df.index + 1
-      means_df = means_df.sort_index()
-      fig.savefig(f"plots/metrics/histos/{prefix}_{hv}_{mn}.png")
-      plt.close(fig)
-  means_df.to_csv(f"tables/{prefix}_means.csv", index=False)
-  save_to_latex(means_df, prefix)
-
-def save_to_latex(df, prefix):
-  # Assuming df has columns: hist_vars | metric | mean | std
-  wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
-  wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
-  
-  order = ["mae", "psnr", "ssim", "r2"]
-  cols = pd.MultiIndex.from_product([order, ["mean", "std"]])
-  wide = wide.reindex(columns=cols)
-  
-  # Optional: hide index name
-  wide.index.name = ""
-  
-  # --- Here’s where the vertical lines magic happens ---
-  column_format = "|l|rr|rr|rr|rr|"
-  
-  latex = wide.to_latex(
-      index=True,
-      multicolumn=True,
-      multicolumn_format="c",
-      float_format=lambda x: f"{x:.3f}",
-      column_format=column_format,
-      caption="Results summary",
-      label="tab:results",
-  )
-  # assume `latex` is the string from wide.to_latex(...)
-  # 1) vertical bars around each 2-col group in the header
-  latex = latex.replace(r"\multicolumn{2}{c}{", r"\multicolumn{2}{|c|}{")
-  
-  # 2) use a tabular preamble with bars between groups
-  latex = latex.replace(r"\begin{tabular}{l", r"\begin{tabular}{|l|rr|rr|rr|rr|}")
-  
-  # 3) if you used booktabs, swap to \hline so bars are drawn
-  latex = (latex.replace(r"\toprule", r"\hline")
-              .replace(r"\midrule", r"\hline")
-              .replace(r"\bottomrule", r"\hline"))
-  
-  Path(f"tables/{prefix}_means.tex").write_text(latex)
-
-
 def plot_histo_2d(indices, names, scene, prefix):
   for i in range(indices.shape[0]):
     fig, ax = plt.subplots()
@@ -122,7 +63,7 @@ def plot_abs_error(indices_gt, indices_inf, names, scene, prefix):
     plt.close(fig)
     
 
-def performance(real_dir, pred_dir):
+def performance(real_dir, pred_dir, prefix='test'):
   """
   Inputs:
     s2 bands grand truth s2b(GT)
@@ -177,7 +118,6 @@ def performance(real_dir, pred_dir):
       s2 bands inferred s2b(I)
       NDVI inferred NDVI(I)
       """
-      print("Loading images")
       s2_gt_test = load_image(file_paths[0]) 
       s2_gt = load_image(file_paths[0], selected_bands) 
       s2_inf = load_image(file_paths[1])
@@ -237,19 +177,19 @@ def performance(real_dir, pred_dir):
     except Exception as e:
       print(f"[ERROR] Error for the scene {dname}: {e}")
   
-  print(gt_vs_inf_df)
-  prefix = "gt_vs_inf"
+  prefix = "test_scenes_gt_vs_inf"
   gt_vs_inf_df.to_csv(f"tables/{prefix}.csv", index=False)
-  plot_histos_from_df(gt_vs_inf_df, metric_names,prefix)
-  print(gt_vs_comp_df)
-  prefix = "gt_vs_comp"
+  produce_outputs_from_df(gt_vs_inf_df, metric_names,prefix)
+  prefix = "test_scenes_gt_vs_comp"
   gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
-  plot_histos_from_df(gt_vs_comp_df, metric_names,prefix)
+  produce_outputs_from_df(gt_vs_comp_df, metric_names,prefix)
+  '''
   print(gt_vs_inf_ndvi_df)
-  prefix = "gt_vs_inf_ndvi"
+  prefix = "test_scenes_gt_vs_inf_ndvi"
   gt_vs_inf_ndvi_df.to_csv(f"tables/{prefix}.csv", index=False)
-  plot_histos_from_df(gt_vs_inf_ndvi_df, metric_names,prefix)
+  produce_outputs_from_df(gt_vs_inf_ndvi_df, metric_names,prefix)
 
+  '''
 
   same_day_comparison = False
   
@@ -260,7 +200,6 @@ def performance(real_dir, pred_dir):
     real_scenes = get_real_scenes(real_dir)
     common_scenes = sorted(set(pred_scenes) & set(real_scenes))
 
-    print(pred_scenes.keys())
     print(real_scenes.keys())
 
     '''

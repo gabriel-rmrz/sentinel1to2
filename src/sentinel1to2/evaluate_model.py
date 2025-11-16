@@ -1,15 +1,23 @@
 import numpy as np
+import pandas as pd
 import torch
 import random
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as TF
 import skimage.metrics
+from pathlib import Path
+from skimage.metrics import peak_signal_noise_ratio
+from skimage.metrics import structural_similarity
+from sklearn.metrics import r2_score
+from .tools.compute_vegetation_indices import compute_vegetation_indices
+from .tools.produce_outputs_from_df import produce_outputs_from_df
 
 
 KKK = 0 
 # TODO: Add evaluation for the test sample as well.
 # Add input bands to the config.
 
+'''
 def  plot_learning_curves(metric_vals, metric_name):
   fig, ax = plt.subplots()
   for i in range(metric_vals.shape[1]):
@@ -17,95 +25,100 @@ def  plot_learning_curves(metric_vals, metric_name):
   fig.savefig(f"plots/learning_curves/{metric_name}.png")
   plt.close(fig)
 
+'''
+def compute_metrics(img_gt, img_inf):
+  mae = np.abs(img_inf - img_gt).mean()
+  psnr = peak_signal_noise_ratio(img_gt, img_inf, data_range=1.0)
+  ssim = structural_similarity(img_gt, img_inf, data_range=1.0)
+  r2 = r2_score(img_gt, img_inf)
+  #print(f"mae: {mae}, psnr: {psnr}, ssim: {ssim}, r2: {r2}")
+  metrics =  [mae, psnr, ssim, r2]
+  return metrics
 
-def evaluate_model(model, device, val_loader, num_samples=5):
+def compute_all_metrics(df, scene_name, g_truth, inference, names):
+   for i in range(g_truth.shape[0]):
+     metrics = compute_metrics(g_truth[i], inference[i])
+     df.loc[-1] = [scene_name, names[i]]+metrics
+     df.index = df.index+1
+     df = df.sort_index()
+   return df
+
+def evaluate_model(model, config, device, val_loader, num_samples=5):
   model.eval()
-  mae_list = []
-  psnr_list = []
-  ssim_list = []
-  mae_list_all_bands = []
-  psnr_list_all_bands = []
-  ssim_list_all_bands = []
   sampled_preds = []
   sampled_targets = []
   with torch.no_grad():
-    for i, (inputs, targets) in enumerate(val_loader):
+    band_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
+    selected_bands = [1,2,3,4,5,6,7,10,11]
+    band_names = [band_names[j] for j in selected_bands]
+    metric_names =  ["mae", "psnr", "ssim", "r2"]
+    gt_vs_inf_df = pd.DataFrame(columns = ['scene','band']+metric_names)
+    gt_vs_comp_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    '''
+    scene_gt_vs_inf_df = pd.DataFrame(columns = ['scene','band']+metric_names)
+    scene_gt_vs_comp_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    gt_vs_inf_sample_df = pd.DataFrame(columns = ['scene','band']+metric_names)
+    gt_vs_comp_sample_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    '''
+
+    '''
+    scenes_ind = {}
+    print(val_loader[0])
+    # getting the indices for the patches of each scene
+    for i, (inputs, targets, scenes, patch_idx) in enumerate(val_loader):
+      for j in len(scenes):
+        print(scenes[j])
+        if scene[j] in scenes_ind.keys():
+          scenes_ind[scene[j]].append((i,j)) 
+        else:
+          scenes_ind = [(i,j)]
+    '''
+
+    for i, (inputs, targets, scenes, patch_idx) in enumerate(val_loader):
       inputs, targets = inputs.to(device), targets.to(device)
+
       outputs = model(inputs)
-      mae_list_per_epoch = []
-      psnr_list_per_epoch = []
-      ssim_list_per_epoch = []
-      sampled_preds_per_epoch = []
-      sampled_targets_per_epoch = []
+      target_scene = [] 
+      output_scene = [] 
+      for j in range(min(num_samples, inputs.size(0))):
+        target_patch = targets[j].cpu().squeeze().numpy()
+        output_patch = outputs[j].cpu().squeeze().numpy()
 
-      target_patch_all_bands = targets.cpu().flatten()
-      output_patch_all_bands = outputs.cpu().flatten()
-      # Calcola metriche
-      mae_all_bands = torch.abs(output_patch_all_bands - target_patch_all_bands).mean().item()
-      psnr_all_bands = skimage.metrics.peak_signal_noise_ratio(
-          target_patch_all_bands.numpy(), output_patch_all_bands.numpy(), data_range=1.0
-      )
-      ssim_all_bands = skimage.metrics.structural_similarity(
-          target_patch_all_bands.numpy(), output_patch_all_bands.numpy(), data_range=1.0
-      )
- 
-      mae_list_all_bands.append(mae_all_bands)
-      psnr_list_all_bands.append(psnr_all_bands)
-      ssim_list_all_bands.append(ssim_all_bands)
-
-      for j in range(outputs.cpu().numpy().shape[1]): # Loop over the bands
-        #input_patch = inputs[j].cpu()
-        target_patch = targets[:,j,:,:].cpu().flatten()
-        output_patch = outputs[:,j,:,:].cpu().flatten()
-
- 
-        # Calcola metriche
-        mae = torch.abs(output_patch - target_patch).mean().item()
-        psnr = skimage.metrics.peak_signal_noise_ratio(
-            target_patch.numpy(), output_patch.numpy(), data_range=1.0
-        )
-        ssim = skimage.metrics.structural_similarity(
-            target_patch.numpy(), output_patch.numpy(), data_range=1.0
-        )
- 
-        mae_list_per_epoch.append(mae)
-        psnr_list_per_epoch.append(psnr)
-        ssim_list_per_epoch.append(ssim)
- 
-        pred_flat = output_patch.flatten().numpy()
-        target_flat = target_patch.flatten().numpy()
-      
+        ind_from_gt, ind_names_from_gt = compute_vegetation_indices(target_patch)
+        ind_from_inf, ind_names_from_inf = compute_vegetation_indices(output_patch)
+        gt_vs_comp_df = compute_all_metrics(gt_vs_comp_df, scenes[j], ind_from_gt, ind_from_inf, ind_names_from_gt)
+        gt_vs_inf_df = compute_all_metrics(gt_vs_inf_df, scenes[j], target_patch, output_patch, band_names)
+        ''' 
         # Numero di pixel da campionare per patch
         num_pix = 512
-        if len(pred_flat) > num_pix:
-          indices = random.sample(range(len(pred_flat)), num_pix)
-          sampled_preds_per_epoch.extend(pred_flat[indices])
-          sampled_targets_per_epoch.extend(target_flat[indices])
-        else:
-          sampled_preds_per_epoch.extend(pred_flat)
-          sampled_targets_per_epoch.extend(target_flat)
-      mae_list.append(mae_list_per_epoch)
-      psnr_list.append(psnr_list_per_epoch)
-      ssim_list.append(ssim_list_per_epoch)
-      sampled_preds.append(sampled_preds_per_epoch)
-      sampled_preds.append(sampled_targets_per_epoch)
-    mae_list = np.array(mae_list)
-    psnr_list = np.array(psnr_list)
-    ssim_list = np.array(ssim_list)
+        # We can't compute spatial structured metrics flattening the arrays
+        # We may can have to compute a reduced number of metrics for the subsample.
+        if target_patch.shape[1]*target_patch.shape[2] > num_pix:
+          indices_x = [random.randint(0, target_patch.shape[1]-1) for i in range(num_pix)]
+          indices_y = [random.randint(0, target_patch.shape[2]-1) for i in range(num_pix)]
+          target_patch_sample = target_patch[:, indices_x, indices_y]
+          output_patch_sample = output_patch[:, indices_x, indices_y]
+          ind_from_gt_sample, ind_names = compute_vegetation_indices(target_patch_sample)
+          ind_from_inf_sample, _ind_names = compute_vegetation_indices(output_patch_sample)
+          gt_vs_comp_sample_df = compute_all_metrics(gt_vs_comp_sample_df, scenes[j], ind_from_gt_sample, ind_from_inf_sample, ind_names)
+          gt_vs_inf_sample_df = compute_all_metrics(gt_vs_inf_sample_df, scenes[j], target_patch_sample, output_patch_sample, band_names)
+        '''
+      
+ 
+      if i * val_loader.batch_size >= num_samples:
+          break
 
-  plot_learning_curves(mae_list, metric_name = 'mae')
-  plot_learning_curves(psnr_list, metric_name = 'psnr')
-  plot_learning_curves(ssim_list, metric_name = 'ssim')
-  print(f"mae_list.shape: {mae_list.shape}")
-
-  mae_list_all_bands = np.array([mae_list_all_bands]).transpose()
-  psnr_list_all_bands = np.array([psnr_list_all_bands]).transpose()
-  ssim_list_all_bands = np.array([ssim_list_all_bands]).transpose()
-  print(f"mae_list_all_bands.shape: {mae_list_all_bands.shape}")
-  plot_learning_curves(mae_list_all_bands, metric_name = 'mae_all_bands')
-  plot_learning_curves(psnr_list_all_bands, metric_name = 'psnr_all_bands')
-  plot_learning_curves(ssim_list_all_bands, metric_name = 'ssim_all_bands')
-
+    prefix = "val_patches_gt_vs_comp"
+    gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
+    produce_outputs_from_df(gt_vs_comp_df, metric_names,prefix)
+    '''
+    prefix = "val_patches_sample_gt_vs_comp"
+    gt_vs_comp_sample_df.to_csv(f"tables/{prefix}.csv", index=False)
+    produce_outputs_from_df(gt_vs_comp_sample_df, metric_names,prefix)
+    prefix = "val_scenes_sample_gt_vs_comp"
+    scene_gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
+    produce_outputs_from_df(scene_gt_vs_comp_df, metric_names,prefix)
+    '''
 
   '''  
   model.eval()
