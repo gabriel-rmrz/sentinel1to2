@@ -16,7 +16,7 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
   # === DSM ===
   with rasterio.open(paths['dsm']) as src:
     dsm = src.read(1).astype(np.float32)[np.newaxis, ...]
-    dsm = (dsm - MEAN[0]) / STD[0]
+    dsm = (dsm - MEAN[0, None, None]) / STD[0, None, None]
     profile = src.profile
 
   # === Sentinel-1 (es. VV, VH) ===
