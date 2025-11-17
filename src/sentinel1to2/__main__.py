@@ -126,7 +126,8 @@ def main() -> None:
   print(len(train_dataset))
   print(len(val_dataset))
   
-  model = get_model(config)
+  #model = get_model(config)
+  model = smp.Unet(encoder_name="efficientnet-b0", in_channels=4, classes=9)
   #print(model)
   # TODO: Add test_loader 
   # TODO: Put the 3 data_loaders in a function 
@@ -178,14 +179,13 @@ def main() -> None:
     print(f"Training finished")
   if "evaluation" in steps.values():
     if not "training" in steps.values():
-      model.load_state_dict(torch.load(config["training"]["model_output_path"]))
+      model.load_state_dict(torch.load(config["training"]["model_output_path"], map_location=device))
     evaluate_model(model, config, device, val_loader, num_samples= 100000)
   if "inference" in steps.values():
     # TODO: use the cofig as parameter instead of the model_path, data_dir
-    '''
     batch_run_inference(
       model_path="best_model.pth",
-      data_dir="data/train/",
+      data_dir="/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/",
       output_dir="data/output_combined/",
       loader=val_loader,
       device=device,
@@ -194,17 +194,18 @@ def main() -> None:
     '''
     batch_run_inference(
       model_path="best_model.pth",
-      data_dir="data/test/",
+      data_dir="/lustrehome/garamire/share/agri2intesa/s1_to_s2/test",
       output_dir="data/output_combined/",
       device=device
     )
+    '''
   if "performance" in steps.values():
-    pred_dir = "data/output_combined"
-    data_dir = "data/test"
+    pred_dir = "data/output_combined/"
+    data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
     
     # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
     # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
-    performance(data_dir, pred_dir)
+    performance(data_dir, pred_dir, 'test')
   
   return
 

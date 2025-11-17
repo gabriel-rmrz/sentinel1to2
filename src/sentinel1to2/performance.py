@@ -78,9 +78,9 @@ def performance(real_dir, pred_dir, prefix='test'):
     indices (GT) vs indices (I)
   """
   # === CONFIG ===
-  pred_dir = "data/output_combined/"
-  pred_ndvi_dir = "data/output"
-  real_dir = "data/test"
+  #pred_dir = "data/output_combined/"
+  pred_ndvi_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/output"
+  #real_dir = "data/test"
 
   #pred_dir = "data/output_combined_bkup/"
   #pred_ndvi_dir = "data/output_bkup"
@@ -102,7 +102,7 @@ def performance(real_dir, pred_dir, prefix='test'):
   for dname in next(os.walk(real_dir))[1]:
     scene, day = dname.split('_')
     file_paths = [f"{real_dir}/{dname}/{day}_s2.tif",
-                  f"{pred_dir}/{dname}_pred.tif",
+                  f"{pred_dir}/{prefix}_{dname}_pred.tif",
                   f"{pred_ndvi_dir}/{dname}_pred_ndvi.tif"]
 
     missing_files = [] 
@@ -177,12 +177,13 @@ def performance(real_dir, pred_dir, prefix='test'):
     except Exception as e:
       print(f"[ERROR] Error for the scene {dname}: {e}")
   
-  prefix = "test_scenes_gt_vs_inf"
-  gt_vs_inf_df.to_csv(f"tables/{prefix}.csv", index=False)
+  prefix_1 = prefix + "_scenes_gt_vs_inf"
+  gt_vs_inf_df.to_csv(f"tables/{prefix_1}.csv", index=False)
   produce_outputs_from_df(gt_vs_inf_df, metric_names,prefix)
-  prefix = "test_scenes_gt_vs_comp"
+  prefix_2 = prefix + "_scenes_gt_vs_comp"
   gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
   produce_outputs_from_df(gt_vs_comp_df, metric_names,prefix)
+
   '''
   print(gt_vs_inf_ndvi_df)
   prefix = "test_scenes_gt_vs_inf_ndvi"

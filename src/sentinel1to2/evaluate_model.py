@@ -111,6 +111,9 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
     prefix = "val_patches_gt_vs_comp"
     gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
     produce_outputs_from_df(gt_vs_comp_df, metric_names,prefix)
+    prefix = "val_patches_gt_vs_inf"
+    gt_vs_inf_df.to_csv(f"tables/{prefix}.csv", index=False)
+    produce_outputs_from_df(gt_vs_inf_df, metric_names,prefix)
     '''
     prefix = "val_patches_sample_gt_vs_comp"
     gt_vs_comp_sample_df.to_csv(f"tables/{prefix}.csv", index=False)

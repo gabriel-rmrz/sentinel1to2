@@ -9,7 +9,8 @@ from .tools.process_scene import process_scene
 def prepare_input_data():
   #data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
   #data_dir = "/Users/garamire/Work/AgriIntesa/sentinel1to2/src/sentinel1to2/data/train_bkup/"
-  data_dir = "/Users/garamire/Work/AgriIntesa/sentinel1to2/src/sentinel1to2/data/train/"
+  #data_dir = "/Users/garamire/Work/AgriIntesa/sentinel1to2/src/sentinel1to2/data/train/"
+  data_dir = "data/train/"
   all_folders = sorted([f for f in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, f))])
   
   # Split scena
