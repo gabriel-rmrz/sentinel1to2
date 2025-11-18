@@ -119,7 +119,11 @@ def main() -> None:
   n_workers = 4
   
   if "preprocessing" in steps.values():
-    prepare_input_data()
+    prepare_input_data(config)
+    if not args.all_steps:
+      return
+
+
   # Caricamento dataset
   train_dataset = scene_split_dataset(config["training"]["train_dataset"])
   val_dataset = scene_split_dataset(config["training"]["val_dataset"])

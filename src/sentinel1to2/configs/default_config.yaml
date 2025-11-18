@@ -1,7 +1,14 @@
 # Parameter for the control of the workflow of the analysis pipeline
 
+job:
+  dir: 'jobs/job_test'
+
 preprocessing:
   patch_dimension: [128,128]
+  input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
+  do_norm_params: false
+  path_params_file: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
+  sample_size: 6
 
 data_loader:
   batch_size: 128

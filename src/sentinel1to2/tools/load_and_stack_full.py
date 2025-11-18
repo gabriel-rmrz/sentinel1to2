@@ -3,7 +3,7 @@ import numpy as np
 import rasterio
 from .compute_vegetation_indices import compute_vegetation_indices
 
-def load_and_stack_full(folder, data_dir, MEAN, STD):
+def load_and_stack_full(folder, data_dir, MEAN=None, STD=None):
   base_name = folder.split("_")[1]
 
   paths = {
@@ -16,19 +16,22 @@ def load_and_stack_full(folder, data_dir, MEAN, STD):
   # === DSM ===
   with rasterio.open(paths['dsm']) as src:
     dsm = src.read(1).astype(np.float32)[np.newaxis, ...]
-    dsm = (dsm - MEAN[0, None, None]) / STD[0, None, None]
+    if MEAN is not None and STD is not None:
+      dsm = (dsm - MEAN[0, None, None]) / STD[0, None, None]
     profile = src.profile
 
   # === Sentinel-1 (es. VV, VH) ===
   with rasterio.open(paths['s1']) as src:
     s1 = src.read((3, 4)).astype(np.float32)  # bands VV/VH
     s1 = np.nan_to_num(s1, nan=0.0, posinf=0.0, neginf=0.0)
-    s1 = (s1 - MEAN[1:3, None, None]) / STD[1:3, None, None]
+    if MEAN is not None and STD is not None:
+      s1 = (s1 - MEAN[1:3, None, None]) / STD[1:3, None, None]
 
   # === WorldCover ===
   with rasterio.open(paths['worldcover']) as src:
     wc = src.read(1).astype(np.float32)[np.newaxis, ...]
-    wc = (wc - MEAN[3]) / STD[3]
+    if MEAN is not None and STD is not None:
+      wc = (wc - MEAN[3]) / STD[3]
 
 
 
