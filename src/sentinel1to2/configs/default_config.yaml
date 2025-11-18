@@ -7,12 +7,9 @@ preprocessing:
   patch_dimension: [128,128]
   input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
   do_norm_params: false
-  path_params_file: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
-  sample_size: 6
+  norm_params_path: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
+  sample_size: 6 # Use 0 to use all the scenes in the train input_dir
 
-data_loader:
-  batch_size: 128
-  n_workers: 0 
 
 model:
   #name: "UNet"
@@ -23,10 +20,15 @@ model:
     in_channels: 4
     classes: 9
 training:
-  train_dataset: "data/train_dataset_S2.h5"
-  val_dataset: "data/val_dataset_S2.h5"
-  output_dir: "data/output_combined/"
-  model_output_path: "trained_models/best_model.pth" # Path to the output model file.
+  output_dir: "output_combined/"
+  model_output: "trained_model.pth" # Path to the output model file.
+  data:
+    train_dataset: "train_dataset_S2.h5"
+    val_dataset: "val_dataset_S2.h5"
+    batch_size: 128
+    n_workers: 8
+  n_epochs: 2
+  patience: 1
   optimizer: 
     name: "Adam"
     parameters:

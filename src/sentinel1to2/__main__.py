@@ -1,5 +1,5 @@
-import segmentation_models_pytorch as smp
 import random
+import csv
 import torch
 import yaml
 import argparse
@@ -11,6 +11,9 @@ from .prepare_input_data import prepare_input_data
 from .train_model import train_model
 from .evaluate_model import evaluate_model
 from .tools.scene_split_dataset import scene_split_dataset
+from .tools.get_steps import get_steps
+from .tools.get_model import get_model
+from .tools.parse_args import parse_args
 from .models.losses.CombinedLoss import CombinedLoss
 from .batch_run_inference import batch_run_inference
 #from .process_scenes import process_scenes
@@ -19,147 +22,81 @@ from .performance import performance
 def check_step_requirements():
   pass
 
-def get_steps(args):
-  step_choices = ["preprocessing", "training", "evaluation", "inference", "performance"]
-  steps = {} 
-  if args.step not in step_choices:
-    return {}
-  if args.step == "preprocessing":
-    steps[0] = "preprocessing"
-    return steps
+def write_list_to_csv(path, list_out):
+  with open(path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows([[x] for x in list_out])
+  return
 
-  if args.all_steps:
-    steps[1] = "training"
-    if args.step == "training":
-      return steps
-    else:
-      steps[2] = "evaluation"
-      if args.step == "evaluation":
-        return steps
-      else:
-        steps[3] = "inference"
-        if args.step == "inference":
-          return steps
-        else: 
-          steps[4] = "performance"
-          return steps
-  elif args.step == "training":
-    steps[1] = "training"
-    return steps
-  elif args.step == "evaluation":
-    steps[1] = "evaluation"
-    return steps
-  elif args.step == "inference":
-    steps[1] = "inference"
-    return steps
-  elif args.step == "performance": 
-    steps[1] = "performance"
-    return steps
-  return {}
+def write_two_lists_to_csv(path, list1, list2):
+  with open(path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["train_losses", "val_losses"])   # optional header
+    for a, b in zip(list1, list2):
+      writer.writerow([a, b])
+  return
 
-def parse_args(argparse):
-  parser = argparse.ArgumentParser(description="Sentinel 1 to Sentinel 2 images translator")
-  parser.add_argument(
-      "-c",
-      "--config",
-      type = Path,
-      default= "configs/default_config.yaml",
-      help="YAML cofiguration file",
-      )
-
-  parser.add_argument(
-      "-a",
-      "--all_steps",
-      type = bool,
-      default= False,
-      help="Set to True if you want to run all the scripts preceeding the selected step.",
-      )
-
-  parser.add_argument(
-      "-s",
-      "--step",
-      choices=["preprocessing", "training", "evaluation", "inference", "performance"],
-      required = True,
-      help="The step to run: training, evaluation, inference or performance.",
-      )
-
-  return parser.parse_args()
-
-def get_model(config):
-  m_name = config["model"]["name"]
-  if m_name == "SMP_UNet": 
-     model = smp.Unet(**config["model"]["parameters"])
-  '''
-  model = smp.Unet(
-    encoder_name="efficientnet-b0",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7                 # meno blocchi dell’encoder
-    encoder_weights='imagenet',             # o None
-    in_channels=4,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-    classes=9,                      # model output channels (number of classes in your dataset)
-  #    decoder_channels=(128, 64, 32),
-  #    encoder_depth=3
-
-  )
-  '''
-  return model
-
-  #model = UNet(in_channels=4, init_features=64, out_channels=1).to(device)
-  #decoder_channels=(256, 128, 64, 32, 16), decoder_attention_type=None,
 def main() -> None:
-  print("running run")
-  # TODO: Stop the script (step) if the propertly formated data is not available.
+  # Configurazioni
+  logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)s]: %(message)s",
+  )
   args = parse_args(argparse)
   steps = get_steps(args)
   with open(args.config, 'r') as file:
     config = yaml.safe_load(file)
-
-  # Configurazioni
-  device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-  batch_size = 4
-  learning_rate = 1e-4
-  n_workers = 4
+  job_dir = Path(config["job"]["dir"])
+  job_data_dir = job_dir / 'data' 
+  job_outputs_dir = job_dir / 'outputs' 
   
-  if "preprocessing" in steps.values():
+  job_data_dir.mkdir(parents=True, exist_ok=True)
+  job_outputs_dir.mkdir(parents=True, exist_ok=True)
+
+  device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+  
+  logging.info(f"Carrying out the following steps:")
+  for st, i_st in steps.items():
+    print(f"\t- {i_st}. {st}")
+  if "preprocessing" in steps.keys():
+    logging.info(f"Step {steps['preprocessing']}: preprocessing.")
     prepare_input_data(config)
     if not args.all_steps:
       return
 
-
   # Caricamento dataset
-  train_dataset = scene_split_dataset(config["training"]["train_dataset"])
-  val_dataset = scene_split_dataset(config["training"]["val_dataset"])
-  print(len(train_dataset))
-  print(len(val_dataset))
   
-  #model = get_model(config)
-  model = smp.Unet(encoder_name="efficientnet-b0", in_channels=4, classes=9)
-  #print(model)
+  logging.info(f"Making use of model {config['model']['name']}")
+  model = get_model(config)
+
   # TODO: Add test_loader 
   # TODO: Put the 3 data_loaders in a function 
   # DataLoaders
   val_loader, train_loader = None, None
-  if "training" in steps.values() or "evaluation" in steps.values() or "inference" in steps.values():
+  if "training" in steps.keys() or "evaluation" in steps.keys() or "inference" in steps.keys():
+    logging.info(f"Loading validation data")
+    val_dataset = scene_split_dataset(job_data_dir / config["training"]["data"]["val_dataset"])
     val_loader = DataLoader(
       val_dataset,
-      batch_size=config["data_loader"]["batch_size"],
+      batch_size=config["training"]["data"]["batch_size"],
       shuffle=True,
-      num_workers=config["data_loader"]["n_workers"],
+      num_workers=config["training"]["data"]["n_workers"],
       persistent_workers=False,
       pin_memory= torch.cuda.is_available()
     )
 
   model = model.to(device)
-  print(steps)
-  if 'training' in steps.values():
+  if 'training' in steps.keys():
+    logging.info(f"Loading training data")
+    train_dataset = scene_split_dataset(job_data_dir / config["training"]["data"]["train_dataset"])
     train_loader = DataLoader(
-      train_dataset, batch_size=config["data_loader"]["batch_size"],
+      train_dataset, batch_size=config["training"]["data"]["batch_size"],
       shuffle=True,
-      num_workers=config["data_loader"]["n_workers"],
+      num_workers=config["training"]["data"]["n_workers"],
       pin_memory=torch.cuda.is_available()
     )
-    print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
-    #model = UNet(in_channels=4, init_features=32, out_channels=1).to(device)
-    #model =  EffUNet(in_channels=6, classes=1)
-    #model = CustomUNet(in_channels=6, init_features=32, depth=5, dropout_rate=0.05, out_channels=1).to(device)
+    #print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
+
     optimizer = torch.optim.Adam(model.parameters(), lr=float(config["training"]["optimizer"]["parameters"]["lr"]))
     #criterion = nn.L1Loss() # nn.MSELoss()  # Per regressione
 
@@ -177,15 +114,21 @@ def main() -> None:
       val_loader,
       criterion,
       optimizer,
-      epochs=2,
-      patience=1
+      epochs=config["training"]["n_epochs"],
+      patience=config["training"]["patience"]
     )
-    print(f"Training finished")
-  if "evaluation" in steps.values():
-    if not "training" in steps.values():
+    output_train_losses_path = job_outputs_dir / "train_losses.csv"
+    output_val_losses_path = job_outputs_dir / "val_losses.csv"
+    logging.info(f"Writing metrics to {output_train_losses_path}")
+    write_list_to_csv(output_train_losses_path, train_losses)
+    logging.info(f"Writing metrics to {output_val_losses_path}")
+    write_list_to_csv(output_val_losses_path, val_losses)
+    logging.info(f"Training finished")
+  if "evaluation" in steps.keys():
+    if not "training" in steps.keys():
       model.load_state_dict(torch.load(config["training"]["model_output_path"], map_location=device))
     evaluate_model(model, config, device, val_loader, num_samples= 100000)
-  if "inference" in steps.values():
+  if "inference" in steps.keys():
     # TODO: use the cofig as parameter instead of the model_path, data_dir
     batch_run_inference(
       model_path="best_model.pth",
@@ -203,8 +146,8 @@ def main() -> None:
       device=device
     )
     '''
-  if "performance" in steps.values():
-    pred_dir = "data/output_combined/"
+  if "performance" in steps.keys():
+    pred_dir = job_data_dir / "output_combined/"
     data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
     
     # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.

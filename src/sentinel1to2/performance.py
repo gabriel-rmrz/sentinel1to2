@@ -15,27 +15,12 @@ from .tools.load_image import load_image
 from .tools.load_predicted_ndvi import load_predicted_ndvi
 from .tools.get_pred_scenes import get_pred_scenes
 from .tools.get_real_scenes import get_real_scenes
+from .tools.compute_metrics import compute_all_metrics
 from .tools.r2_by_class import r2_by_class
 from .plotting.scatter_with_r2 import scatter_with_r2
 from .plotting.scatter_with_r2_by_class import scatter_with_r2_by_class
 
 
-def compute_metrics(img_gt, img_inf):
-  mae = np.abs(img_inf - img_gt).mean()
-  psnr = peak_signal_noise_ratio(img_gt, img_inf, data_range=1.0)
-  ssim = structural_similarity(img_gt, img_inf, data_range=1.0)
-  r2 = r2_score(img_gt, img_inf)
-  #print(f"mae: {mae}, psnr: {psnr}, ssim: {ssim}, r2: {r2}")
-  metrics =  [mae, psnr, ssim, r2]
-  return metrics
-
-def compute_all_metrics(df, scene_name, g_truth, inference, names):
-   for i in range(g_truth.shape[0]):
-     metrics = compute_metrics(g_truth[i,:,:], inference[i,:,:])
-     df.loc[-1] = [scene_name, names[i]]+metrics
-     df.index = df.index+1
-     df = df.sort_index()
-   return df
 
 def plot_histo_2d(indices, names, scene, prefix):
   for i in range(indices.shape[0]):
