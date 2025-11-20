@@ -2,7 +2,8 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-def produce_outputs_from_df(df, metric_names, prefix):
+    
+def produce_outputs_from_df(df, config, metric_names, prefix):
   if "veg_index" in df.keys():
     hist_vars = df["veg_index"].unique()
     var_type = "veg_index"

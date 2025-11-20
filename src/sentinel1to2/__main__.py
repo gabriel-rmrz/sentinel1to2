@@ -124,10 +124,6 @@ def main() -> None:
     logging.info(f"Writing metrics to {output_val_losses_path}")
     write_list_to_csv(output_val_losses_path, val_losses)
     logging.info(f"Training finished")
-  if "evaluation" in steps.keys():
-    if not "training" in steps.keys():
-      model.load_state_dict(torch.load(config["training"]["model_output_path"], map_location=device))
-    evaluate_model(model, config, device, val_loader, num_samples= 100000)
   if "inference" in steps.keys():
     # TODO: use the cofig as parameter instead of the model_path, data_dir
     batch_run_inference(
@@ -146,6 +142,11 @@ def main() -> None:
       device=device
     )
     '''
+  if "evaluation" in steps.keys():
+    if not "training" in steps.keys():
+      model.load_state_dict(torch.load(job_data_dir / config["training"]["model_output"], map_location=device))
+    evaluate_model(model, config, device, val_loader, num_samples= 100000)
+
   if "performance" in steps.keys():
     pred_dir = job_data_dir / "output_combined/"
     data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"

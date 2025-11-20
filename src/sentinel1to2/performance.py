@@ -39,8 +39,6 @@ def plot_scatter_gt_vs_inf(indices_gt, indices_inf, names, scene, prefix):
     plt.close(fig)
 
 def plot_abs_error(indices_gt, indices_inf, names, scene, prefix):
-  # TODO: Add x=y line
-  # TODO: Add to the config file the indices selected and the their limits
   for i in range(indices_gt.shape[0]):
     fig, ax = plt.subplots()
     plt.hist(np.abs(indices_gt[i].flatten()-indices_inf[i].flatten()))
@@ -164,10 +162,10 @@ def performance(real_dir, pred_dir, prefix='test'):
   
   prefix_1 = prefix + "_scenes_gt_vs_inf"
   gt_vs_inf_df.to_csv(f"tables/{prefix_1}.csv", index=False)
-  produce_outputs_from_df(gt_vs_inf_df, metric_names,prefix)
+  produce_outputs_from_df(gt_vs_inf_df, config, metric_names,prefix)
   prefix_2 = prefix + "_scenes_gt_vs_comp"
   gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
-  produce_outputs_from_df(gt_vs_comp_df, metric_names,prefix)
+  produce_outputs_from_df(gt_vs_comp_df, config, metric_names,prefix)
 
   '''
   print(gt_vs_inf_ndvi_df)

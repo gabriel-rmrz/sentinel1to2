@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 from skimage.metrics import peak_signal_noise_ratio
 from skimage.metrics import structural_similarity
 from sklearn.metrics import r2_score

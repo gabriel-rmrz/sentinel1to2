@@ -12,12 +12,12 @@ def get_steps(args):
     if args.step == "training":
       return steps
     else:
-      steps["evaluation"] = 2
-      if args.step == "evaluation":
+      steps["inference"] = 2
+      if args.step == "inference":
         return steps
       else:
-        steps["inference"] = 3
-        if args.step == "inference":
+        steps["evaluation"] = 3
+        if args.step == "evaluation":
           return steps
         else:
           steps["performance"] = 4
@@ -25,11 +25,11 @@ def get_steps(args):
   elif args.step == "training":
     steps["training"] = 1
     return steps
-  elif args.step == "evaluation":
-    steps["evaluation"] = 1
-    return steps
   elif args.step == "inference":
     steps["inference"] = 1
+    return steps
+  elif args.step == "evaluation":
+    steps["evaluation"] = 1
     return steps
   elif args.step == "performance":
     steps["performance"] = 1
