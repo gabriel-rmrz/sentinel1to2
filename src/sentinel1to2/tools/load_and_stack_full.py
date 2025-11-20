@@ -3,7 +3,7 @@ import numpy as np
 import rasterio
 from .compute_vegetation_indices import compute_vegetation_indices
 
-def load_and_stack_full(folder, data_dir, MEAN=None, STD=None):
+def load_and_stack_full(config, folder, data_dir, MEAN=None, STD=None):
   base_name = folder.split("_")[1]
 
   paths = {
@@ -41,7 +41,7 @@ def load_and_stack_full(folder, data_dir, MEAN=None, STD=None):
 
   
   s2_selected  = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  indices, _ind_names = compute_vegetation_indices(s2_selected)
+  indices, _ind_names = compute_vegetation_indices(config, s2_selected)
 
 
   #print(f"[{folder}] target min/max:", indices.min(), indices.max())

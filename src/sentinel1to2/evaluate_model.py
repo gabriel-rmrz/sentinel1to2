@@ -130,8 +130,8 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
       for j in range(min(num_samples, inputs.size(0))):
         target_patch = targets[j].cpu().squeeze().numpy()
         output_patch = outputs[j].cpu().squeeze().numpy()
-        ind_from_gt, ind_names_from_gt = compute_vegetation_indices(target_patch)
-        ind_from_inf, ind_names_from_inf = compute_vegetation_indices(output_patch)
+        ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, target_patch)
+        ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, output_patch)
         gt_vs_comp_df = compute_all_metrics(gt_vs_comp_df, scenes[j], ind_from_gt, ind_from_inf, ind_names_from_gt)
         gt_vs_inf_df = compute_all_metrics(gt_vs_inf_df, scenes[j], target_patch, output_patch, band_names)
 
@@ -192,8 +192,8 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
           indices_y = [random.randint(0, target_patch.shape[2]-1) for i in range(num_pix)]
           target_patch_sample = target_patch[:, indices_x, indices_y]
           output_patch_sample = output_patch[:, indices_x, indices_y]
-          ind_from_gt_sample, ind_names = compute_vegetation_indices(target_patch_sample)
-          ind_from_inf_sample, _ind_names = compute_vegetation_indices(output_patch_sample)
+          ind_from_gt_sample, ind_names = compute_vegetation_indices(config, target_patch_sample)
+          ind_from_inf_sample, _ind_names = compute_vegetation_indices(config, output_patch_sample)
           gt_vs_comp_sample_df = compute_all_metrics(gt_vs_comp_sample_df, scenes[j], ind_from_gt_sample, ind_from_inf_sample, ind_names)
           gt_vs_inf_sample_df = compute_all_metrics(gt_vs_inf_sample_df, scenes[j], target_patch_sample, output_patch_sample, band_names)
         '''
@@ -214,108 +214,3 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
     logging.info(f"Saving output: {table2_path}")
     gt_vs_inf_df.to_csv(table2_path, index=False)
     produce_outputs_from_df(gt_vs_inf_df, config, metric_names,prefix2)
-    '''
-    prefix = "val_patches_sample_gt_vs_comp"
-    gt_vs_comp_sample_df.to_csv(f"tables/{prefix}.csv", index=False)
-    produce_outputs_from_df(gt_vs_comp_sample_df, config, metric_names,prefix)
-    prefix = "val_scenes_sample_gt_vs_comp"
-    scene_gt_vs_comp_df.to_csv(f"tables/{prefix}.csv", index=False)
-    produce_outputs_from_df(scene_gt_vs_comp_df, config, metric_names,prefix)
-    '''
-
-  '''  
-  model.eval()
-  mae_list = []
-  psnr_list = []
-  ssim_list = []
-  sampled_preds = []
-  sampled_targets = []
-  for KKK in range(9):
-    with torch.no_grad():
-      for i, (inputs, targets) in enumerate(val_loader):
-        inputs, targets = inputs.to(device), targets.to(device)
-        outputs = model(inputs)
-
-        print(f"inputs.cpu().numpy().shape: {inputs.cpu().numpy().shape}")
-        print(f"targets.cpu().numpy().shape: {targets.cpu().numpy().shape}")
-        print(f"outputs.cpu().numpy().shape: {outputs.cpu().numpy().shape}")
-        exit()
-        for j in range(min(num_samples, inputs.size(0))):
-          input_patch = inputs[j].cpu()
-          target_patch = targets[j].cpu().squeeze(0)[KKK]
-          output_patch = outputs[j].cpu().squeeze(0)[KKK]
-
-  
-          # Calcola metriche
-          mae = torch.abs(output_patch - target_patch).mean().item()
-          psnr = skimage.metrics.peak_signal_noise_ratio(
-              target_patch.numpy(), output_patch.numpy(), data_range=1.0
-          )
-          ssim = skimage.metrics.structural_similarity(
-              target_patch.numpy(), output_patch.numpy(), data_range=1.0
-          )
-  
-          mae_list.append(mae)
-          psnr_list.append(psnr)
-          ssim_list.append(ssim)
-  
-          pred_flat = output_patch.flatten().numpy()
-          target_flat = target_patch.flatten().numpy()
-        
-          # Numero di pixel da campionare per patch
-          num_pix = 512
-          if len(pred_flat) > num_pix:
-              indices = random.sample(range(len(pred_flat)), num_pix)
-              sampled_preds.extend(pred_flat[indices])
-              sampled_targets.extend(target_flat[indices])
-          else:
-              sampled_preds.extend(pred_flat)
-              sampled_targets.extend(target_flat)
-  
-          """
-          # Visualizza
-          fig, axs = plt.subplots(1, 3, figsize=(14, 4))
-          
-          # NDVI range: -1 a 1
-          vmin_ndvi, vmax_ndvi = 0, 0.5
-          error = torch.abs(target_patch - output_patch)
-          vmin_err, vmax_err = 0, 1  # NDVI unità di errore massimo possibile
-          
-          im0 = axs[0].imshow(target_patch, cmap='viridis', vmin=vmin_ndvi, vmax=vmax_ndvi)
-          axs[0].set_title('Target NDVI')
-          axs[0].axis('off')
-          cbar0 = plt.colorbar(im0, ax=axs[0], fraction=0.046, pad=0.04)
-          cbar0.set_label("NDVI")
-          
-          im1 = axs[1].imshow(output_patch, cmap='viridis', vmin=vmin_ndvi, vmax=vmax_ndvi)
-          axs[1].set_title('Predicted NDVI')
-          axs[1].axis('off')
-          cbar1 = plt.colorbar(im1, ax=axs[1], fraction=0.046, pad=0.04)
-          cbar1.set_label("NDVI")
-          
-          im2 = axs[2].imshow(error, cmap='magma', vmin=vmin_err, vmax=vmax_err)
-          axs[2].set_title('Absolute Error')
-          axs[2].axis('off')
-          cbar2 = plt.colorbar(im2, ax=axs[2], fraction=0.046, pad=0.04)
-          cbar2.set_label("NDVI units")
-          
-          plt.tight_layout()
-          plt.show()
-          """
-          
-          
-        if i * val_loader.batch_size >= num_samples:
-            break
-
-    print(f"BAND:  {KKK:.1f}")
-    print(f"MAE:  {np.mean(mae_list):.4f}")
-    print(f"PSNR: {np.mean(psnr_list):.2f}")
-    print(f"SSIM: {np.mean(ssim_list):.4f}")
-    sampled_preds_ar = np.array(sampled_preds)
-    sampled_targets_ar = np.array(sampled_targets)
-    sampled_errors_ar = np.abs(sampled_preds_ar - sampled_targets_ar)
-    from sklearn.metrics import r2_score
-    r2 = r2_score(sampled_targets_ar, sampled_preds_ar)
-    print("R^{2}:", r2)
-    np.mean(sampled_errors_ar)
-  '''

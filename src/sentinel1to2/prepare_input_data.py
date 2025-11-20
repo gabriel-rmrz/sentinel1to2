@@ -71,7 +71,7 @@ def prepare_input_data(config):
         metadata_grp = hf.create_group("metadata")
         metadata_grp.create_dataset("scene_list", data=np.array(train_folders, dtype='S'))
         for folder in tqdm(train_folders, desc="Processing training scenes"):
-            process_scene(folder, data_dir, hf)
+            process_scene(config, folder, data_dir, hf)
 
     # Step 2: calcolo mean/std
     mean, std = compute_hdf5_mean_std(train_tmp_hdf5_path)
@@ -81,7 +81,7 @@ def prepare_input_data(config):
     logging.info(f"Saving normalization parameters into {norm_params_out_path}.")
     np.savez(norm_params_out_path, mean=mean, std=std)
   else:
-    params = np.load(params['precal_norm_params_path'])
+    params = np.load(params['precalc_norm_params_path'])
     mean = params["mean"] 
     std =  params["std"]
     logging.info(f"Saving normalization parameters into {norm_params_out_path}.")
@@ -93,7 +93,7 @@ def prepare_input_data(config):
     metadata_grp = hf.create_group("metadata")
     metadata_grp.create_dataset("scene_list", data=np.array(train_folders, dtype='S'))
     for folder in tqdm(train_folders, desc="Writing normalized training scenes"):
-      process_scene(folder, data_dir, hf, mean=mean, std=std)
+      process_scene(config, folder, data_dir, hf, mean=mean, std=std)
 
   # Step 4: crea HDF5 val usando stessi parametri
   logging.info(f"Producing validation dataset {val_hdf5_path}")
@@ -101,6 +101,6 @@ def prepare_input_data(config):
     metadata_grp = hf.create_group("metadata")
     metadata_grp.create_dataset("scene_list", data=np.array(val_folders, dtype='S'))
     for folder in tqdm(val_folders, desc="Writing normalized validation scenes"):
-      process_scene(folder, data_dir, hf, mean=mean, std=std)
+      process_scene(config, folder, data_dir, hf, mean=mean, std=std)
 
   logging.info(f"Preparation of the samples perfomed successfully.")

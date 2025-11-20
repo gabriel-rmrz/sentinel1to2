@@ -2,9 +2,9 @@ import os
 import h5py
 import numpy as np
 from .load_and_stack_full import load_and_stack_full
-def process_scene(folder, data_dir, hdf5_file, crop_size=128, stride=128, mean = None, std = None):
+def process_scene(config, folder, data_dir, hdf5_file, crop_size=128, stride=128, mean = None, std = None):
   try:
-    dsm, s1, worldcover, s2_selected, indices, _profile = load_and_stack_full(folder, data_dir, mean, std)
+    dsm, s1, worldcover, s2_selected, indices, _profile = load_and_stack_full(config, folder, data_dir, mean, std)
 
     input_patches = []
     target_patches = []

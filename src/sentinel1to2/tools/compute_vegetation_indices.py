@@ -1,6 +1,6 @@
 import numpy as np
 
-def compute_vegetation_indices(s2):
+def compute_vegetation_indices(config, s2):
   """
   inputs:
     s2: We are considering only the bands relevants for our pipeline. If we have all sentinel bands, we are suposed to filter
@@ -18,45 +18,57 @@ def compute_vegetation_indices(s2):
   swir   = s2[8] # B12
 
   eps = 1e-6
+  vi = config['params']['vegetation_indices']
+
   # === Indici Spettrali ===
-  ndvi = (nir - red) / (nir + red + eps)
-  gndvi = (nir - green) / (nir + green + eps)
-  ndre = (nir - rededge) / (nir + rededge + eps)
-  reci = (nir / (rededge + eps)) - 1
-  msi = swir / (nir + eps)
-  ndwi = (green - nir) / (green + nir + eps)
-  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-  #cire = nir / (rededge + eps)
-  cig = (nir - green) / (green + eps)
-  cire = (nir - rededge) / (rededge + eps)
-  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-  ndsi = (green - swir) / (green + swir + eps)
-  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
+  ind_list = []
+  if "ndvi" in vi:
+    ndvi = (nir - red) / (nir + red + eps)
+    ind_list.append(np.clip(ndvi, -1, 1))
+  if "gndvi" in vi:
+    gndvi = (nir - green) / (nir + green + eps)
+    ind_list.append(np.clip(gndvi, -1, 1))
+  if "ndre" in vi:
+    ndre = (nir - rededge) / (nir + rededge + eps)
+    ind_list.append(np.clip(ndre, -1, 1))
+  if "reci" in vi:
+    reci = (nir / (rededge + eps)) - 1
+    ind_list.append(np.clip(reci, -1, 10))
+  if "msi" in vi:
+    msi = swir / (nir + eps)
+    ind_list.append(np.clip(msi, 0, 10))
+  if "ndwi" in vi:
+    ndwi = (green - nir) / (green + nir + eps)
+    ind_list.append(np.clip(ndwi, -1, 1))
+  if "evi" in vi:
+    evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
+    ind_list.append(np.clip(evi, 0, 2))
+  if "savi" in vi:
+    savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
+    ind_list.append(np.clip(savi, -1, 1))
+  if "arvi" in vi:
+    arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
+    ind_list.append(np.clip(arvi, -1, 1))
+  if "cig" in vi:
+    cig = (nir - green) / (green + eps)
+    ind_list.append(np.clip(cig, -1, 1))
+  if "cire" in vi:
+    cire = (nir - rededge) / (rededge + eps)
+    ind_list.append(np.clip(cire, 0, 10)) 
+  if "bsi" in vi:
+    bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
+    ind_list.append(np.clip(bsi, -1, 1))
+  if "ndsi" in vi:
+    ndsi = (green - swir) / (green + swir + eps)
+    ind_list.append(np.clip(ndsi, -1, 1))
+  if "mcari" in vi:
+    mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
+    ind_list.append(np.clip(mcari, 0, 10)) 
+  #print(ind_list)
   #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
-  ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
+  #ind_names = vi #["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
   #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
 
-  #s2_selected = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  #print(np.clip(mcari, 0, 10).shape)
-  indices = np.stack([
-      np.clip(ndvi, -1, 1), #np.clip(ndvi, -1, 1), #In teoria mi interessano i soli valori tra 0 e 1
-      np.clip(gndvi, -1, 1),
-      np.clip(ndre, -1, 1),
-      np.clip(reci, -1, 10),
-      np.clip(msi, 0, 10),
-      np.clip(ndwi, -1, 1),
-      np.clip(evi, 0, 2),
-      np.clip(savi, -1, 1),
-      np.clip(arvi, -1, 1),
-      np.clip(cig, -1, 1),
-      np.clip(cire, -1, 1),
-      #np.clip(cire, 0, 10),
-      np.clip(bsi, -1, 1),
-      np.clip(ndsi, -1, 1),
-      np.clip(mcari, 0, 10),
-      #np.clip(msavi, -1, 1)
-  ], axis=0).astype(np.float32)
+  indices = np.stack(ind_list, axis=0).astype(np.float32)
 
-  return indices, ind_names 
+  return indices, vi 

@@ -48,9 +48,10 @@ inference:
 evaluation:
   scenes_to_plot: 2
 
-
 target:
+  band_type: true # True if the output are 9 bands of Sentinel2. 
   all_bands: ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
   selected_bands: [1,2,3,4,5,6,7,10,11]  # The number of elements of this list should match the number of output classes
 
-
+params:
+  vegetation_indices: ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]

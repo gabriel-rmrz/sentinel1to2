@@ -28,7 +28,7 @@ def inference(config, scene_folder, device='cuda', prefix='test'):
   model.to(device)
 
   # Carica stack input
-  dsm, s1, wc, _s2_selected, _ind, profile = load_and_stack_full(scene_folder, data_dir, MEAN, STD)
+  dsm, s1, wc, _s2_selected, _ind, profile = load_and_stack_full(config, scene_folder, data_dir, MEAN, STD)
   input_stack = np.concatenate([dsm,s1,wc], axis=0)
   print(f"Input shape: {input_stack.shape}")
 

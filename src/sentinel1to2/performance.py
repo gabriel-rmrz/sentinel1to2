@@ -115,8 +115,8 @@ def performance(real_dir, pred_dir, prefix='test'):
         s2b(I)
       """
       # put the indices in the config file
-      ind_from_gt, ind_names_from_gt = compute_vegetation_indices(s2_gt)
-      ind_from_inf, ind_names_from_inf = compute_vegetation_indices(s2_inf)
+      ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, s2_gt)
+      ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, s2_inf)
       '''
       """
       Plot 2D hitograms for the indices
