@@ -5,10 +5,13 @@ job:
 
 preprocessing:
   patch_dimension: [128,128]
-  input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
+  #input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
+  input_dir: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/train"
   do_norm_params: false
-  norm_params_path: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
-  sample_size: 6 # Use 0 to use all the scenes in the train input_dir
+  norm_params_file: "normalization_params.npz"
+  #norm_params_path: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
+  precalc_norm_params_path: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/normalization_params.npz"
+  sample_size: 6 # Use 0 to use all the scenes in the training input_dir
 
 
 model:
@@ -20,7 +23,6 @@ model:
     in_channels: 4
     classes: 9
 training:
-  output_dir: "output_combined/"
   model_output: "trained_model.pth" # Path to the output model file.
   data:
     train_dataset: "train_dataset_S2.h5"
@@ -39,8 +41,10 @@ training:
       alpha: 1.0
       beta: 2
       gamma: 0.1
-#inference:
-#  input_dir: "data/inference/"
+inference:
+  #input_dir: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/test" 
+  output_dir: "output_combined/"
+  sample_size: 6 # Use 0 to use all the scenes in the testing input_dir
 evaluation:
   scenes_to_plot: 2
 

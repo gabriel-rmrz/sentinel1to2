@@ -123,30 +123,26 @@ def main() -> None:
     write_list_to_csv(output_train_losses_path, train_losses)
     logging.info(f"Writing metrics to {output_val_losses_path}")
     write_list_to_csv(output_val_losses_path, val_losses)
-    logging.info(f"Training finished")
+    logging.info(f"Training step finished")
   if "inference" in steps.keys():
     # TODO: use the cofig as parameter instead of the model_path, data_dir
     batch_run_inference(
-      model_path="best_model.pth",
-      data_dir="/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/",
-      output_dir="data/output_combined/",
-      loader=val_loader,
+      config,
       device=device,
-      prefix='val'
+      prefix='val' # use 'val' to load validation scene list
     )
     '''
     batch_run_inference(
-      model_path="best_model.pth",
-      data_dir="/lustrehome/garamire/share/agri2intesa/s1_to_s2/test",
-      output_dir="data/output_combined/",
+      config,
       device=device
     )
     '''
+    logging.info(f"Inference step finished")
   if "evaluation" in steps.keys():
     if not "training" in steps.keys():
       model.load_state_dict(torch.load(job_data_dir / config["training"]["model_output"], map_location=device))
     evaluate_model(model, config, device, val_loader, num_samples= 100000)
-
+    logging.info(f"Evaluation finished")
   if "performance" in steps.keys():
     pred_dir = job_data_dir / "output_combined/"
     data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
@@ -154,6 +150,7 @@ def main() -> None:
     # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
     # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
     performance(data_dir, pred_dir, 'test')
+    logging.info(f"Performance step finished")
   
   return
 

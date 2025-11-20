@@ -140,13 +140,14 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
 
           #plot_histo_2d(job_plots_ind_h2d, ind_from_gt, ind_names_from_gt, scenes[j], prefix=f"val_patch_{scene_count}_computed_from_gt")
           #plot_histo_2d(job_plots_ind_h2d, ind_from_inf, ind_names_from_inf, scenes[j], prefix=f"val_patch_{scene_count}_computed_from_inf")
-          plot_comparison_histos_2d(job_plots_dir / 'patches/val/indices/histos2d_comparison', 
+          plot_comparison_histos_2d(
+              job_plots_dir / 'patches/val/indices/histos2d_comparison', 
               ind_from_gt, 
               ind_from_inf, 
               ind_names_from_gt, 
               scenes[j], 
               prefix=f"{scene_count}_computed_from_gt_vs_inf")
-         plot_comparison_histos_2d(job_plots_dir / 'patches/val/bands/histos2d_comparison', 
+          plot_comparison_histos_2d(job_plots_dir / 'patches/val/bands/histos2d_comparison', 
              target_patch, 
              output_patch, 
              band_names, 

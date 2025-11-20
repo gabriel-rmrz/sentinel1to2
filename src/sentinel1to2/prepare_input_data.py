@@ -64,7 +64,7 @@ def prepare_input_data(config):
   write_list_to_csv(job_lists_dir / 'training_scene_list.csv', train_folders)
   write_list_to_csv(job_lists_dir / 'validation_scene_list.csv', val_folders)
   
-  norm_params_out_path = job_data_dir / "normalization_params.npz"
+  norm_params_out_path = job_data_dir / config["preprocessing"]["norm_params_file"] #"normalization_params.npz"
   if params['do_norm_params']:
     # Step 1: crea HDF5 train temporaneo
     with h5py.File(train_tmp_hdf5_path, 'w') as hf:
@@ -81,7 +81,7 @@ def prepare_input_data(config):
     logging.info(f"Saving normalization parameters into {norm_params_out_path}.")
     np.savez(norm_params_out_path, mean=mean, std=std)
   else:
-    params = np.load(params['norm_params_path'])
+    params = np.load(params['precal_norm_params_path'])
     mean = params["mean"] 
     std =  params["std"]
     logging.info(f"Saving normalization parameters into {norm_params_out_path}.")

@@ -1,14 +1,33 @@
-import os
+import logging
+from pathlib import Path
 import torch
 import itertools
 from .inference import inference
 
-def batch_run_inference(model_path, data_dir, output_dir, loader= None, device='cuda',prefix='test'):
+def batch_run_inference(config, device='cuda',prefix='test'):
+  logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)s]: %(message)s",
+  )
+  job_dir = Path(config["job"]["dir"])
+  job_data_dir = job_dir / 'data'
+  data_dir = config['preprocessing']['input_dir']
   # Get list (if we don't want to run over all the files in the val/test directory)
-  scene_folders = [f for f in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, f))]
-  print(scene_folders)
+  all_scenes = sorted([f.name for f in Path(data_dir).iterdir() if f.is_dir()])
+  if prefix == 'val':
+    with open(job_data_dir / 'lists/validation_scene_list.csv', 'r') as file:
+      all_scenes = [scene.strip() for scene in file.readlines()]
+      #all_scenes = list(file)
+  sample_size = config['inference']['sample_size']
+
+  if sample_size == 0 or sample_size > len(all_scenes):
+    sample_scenes = all_scenes
+    sample_size = len(all_scenes)
+  else:
+    sample_scenes = all_scenes[:sample_size]
+  logging.info(f"Sampling {sample_size} out of {len(all_scenes)} scenes available in {data_dir}")
+  '''
   if loader != None:
-    print("here")
     with torch.no_grad():
       chosen_scenes = []
       for inputs, targets, scenes, patch_idx in loader:
@@ -20,13 +39,12 @@ def batch_run_inference(model_path, data_dir, output_dir, loader= None, device='
           if cs in sf:
             scene_folders_tmp.append(sf)
       scene_folders = scene_folders_tmp
-  for scene_folder in scene_folders:
+  '''
+  for scene_folder in sample_scenes:
     print(f"\n🔍 Inference su scena: {scene_folder}")
     inference(
+      config,
       scene_folder=scene_folder,
-      model_path=model_path,
-      data_dir=data_dir,
-      output_dir=output_dir,
       device=device,
       prefix=prefix
     )
