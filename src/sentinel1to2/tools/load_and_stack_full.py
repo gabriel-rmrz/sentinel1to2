@@ -41,9 +41,9 @@ def load_and_stack_full(config, folder, data_dir, MEAN=None, STD=None):
 
   
   s2_selected  = s2[ np.r_[1,2,3,4,5,6,7,10,11] ]/10000
-  indices, _ind_names = compute_vegetation_indices(config, s2_selected)
+  indices, ind_names = compute_vegetation_indices(config, s2_selected)
 
 
   #print(f"[{folder}] target min/max:", indices.min(), indices.max())
 
-  return dsm, s1, wc, s2_selected, indices, profile
+  return dsm, s1, wc, s2_selected, indices, ind_names,  profile

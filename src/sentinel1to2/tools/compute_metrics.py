@@ -12,10 +12,16 @@ def compute_metrics(img_gt, img_inf):
   metrics =  [mae, psnr, ssim, r2]
   return metrics
 
-def compute_all_metrics(df, scene_name, g_truth, inference, names):
+def compute_all_metrics(file, scene_name, g_truth, inference, names):
    for i in range(g_truth.shape[0]):
      metrics = compute_metrics(g_truth[i], inference[i])
+     metrics = [f"{float(m):4f}" for m in metrics]
+     file.write(','.join([scene_name, names[i]]+metrics))
+     file.write('\n')
+
+     '''
      df.loc[-1] = [scene_name, names[i]]+metrics
      df.index = df.index+1
      df = df.sort_index()
-   return df
+     '''
+   #return df

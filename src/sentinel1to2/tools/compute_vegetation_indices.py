@@ -18,56 +18,80 @@ def compute_vegetation_indices(config, s2):
   swir   = s2[8] # B12
 
   eps = 1e-6
-  vi = config['params']['vegetation_indices']
+  #TODO: the order of vi have to match the order of the indices for the 
+  # method load_and_stack to work properly. Change the logic
 
-  # === Indici Spettrali ===
+  vi = config['params']['vegetation_indices']
   ind_list = []
-  if "ndvi" in vi:
-    ndvi = (nir - red) / (nir + red + eps)
-    ind_list.append(np.clip(ndvi, -1, 1))
-  if "gndvi" in vi:
-    gndvi = (nir - green) / (nir + green + eps)
-    ind_list.append(np.clip(gndvi, -1, 1))
-  if "ndre" in vi:
-    ndre = (nir - rededge) / (nir + rededge + eps)
-    ind_list.append(np.clip(ndre, -1, 1))
-  if "reci" in vi:
-    reci = (nir / (rededge + eps)) - 1
-    ind_list.append(np.clip(reci, -1, 10))
-  if "msi" in vi:
-    msi = swir / (nir + eps)
-    ind_list.append(np.clip(msi, 0, 10))
-  if "ndwi" in vi:
-    ndwi = (green - nir) / (green + nir + eps)
-    ind_list.append(np.clip(ndwi, -1, 1))
-  if "evi" in vi:
-    evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-    ind_list.append(np.clip(evi, 0, 2))
-  if "savi" in vi:
-    savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-    ind_list.append(np.clip(savi, -1, 1))
-  if "arvi" in vi:
-    arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-    ind_list.append(np.clip(arvi, -1, 1))
-  if "cig" in vi:
-    cig = (nir - green) / (green + eps)
-    ind_list.append(np.clip(cig, -1, 1))
-  if "cire" in vi:
-    cire = (nir - rededge) / (rededge + eps)
-    ind_list.append(np.clip(cire, 0, 10)) 
-  if "bsi" in vi:
-    bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-    ind_list.append(np.clip(bsi, -1, 1))
-  if "ndsi" in vi:
-    ndsi = (green - swir) / (green + swir + eps)
-    ind_list.append(np.clip(ndsi, -1, 1))
-  if "mcari" in vi:
-    mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-    ind_list.append(np.clip(mcari, 0, 10)) 
+  ndvi = (nir - red) / (nir + red + eps)
+  ind_list.append(ndvi)
+  gndvi = (nir - green) / (nir + green + eps)
+  ind_list.append(gndvi)
+  ndre = (nir - rededge) / (nir + rededge + eps)
+  ind_list.append(ndre)
+  reci = (nir / (rededge + eps)) - 1
+  ind_list.append(reci)
+  msi = swir / (nir + eps)
+  ind_list.append(msi)
+  ndwi = (green - nir) / (green + nir + eps)
+  ind_list.append(ndwi)
+  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
+  ind_list.append(evi)
+  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
+  ind_list.append(savi)
+  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
+  ind_list.append(arvi)
+  cig = (nir - green) / (green + eps)
+  ind_list.append(cig)
+  cire = (nir - rededge) / (rededge + eps)
+  ind_list.append(cire) 
+  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
+  ind_list.append(bsi)
+  ndsi = (green - swir) / (green + swir + eps)
+  ind_list.append(ndsi)
+  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
+  ind_list.append(mcari) 
   #print(ind_list)
   #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
   #ind_names = vi #["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
   #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
+
+  '''
+  # === Indici Spettrali ===
+  ind_list = []
+  ndvi = (nir - red) / (nir + red + eps)
+  ind_list.append(np.clip(ndvi, -1, 1))
+  gndvi = (nir - green) / (nir + green + eps)
+  ind_list.append(np.clip(gndvi, -1, 1))
+  ndre = (nir - rededge) / (nir + rededge + eps)
+  ind_list.append(np.clip(ndre, -1, 1))
+  reci = (nir / (rededge + eps)) - 1
+  ind_list.append(np.clip(reci, -1, 10))
+  msi = swir / (nir + eps)
+  ind_list.append(np.clip(msi, 0, 10))
+  ndwi = (green - nir) / (green + nir + eps)
+  ind_list.append(np.clip(ndwi, -1, 1))
+  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
+  ind_list.append(np.clip(evi, 0, 2))
+  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
+  ind_list.append(np.clip(savi, -1, 1))
+  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
+  ind_list.append(np.clip(arvi, -1, 1))
+  cig = (nir - green) / (green + eps)
+  ind_list.append(np.clip(cig, -1, 1))
+  cire = (nir - rededge) / (rededge + eps)
+  ind_list.append(np.clip(cire, 0, 10)) 
+  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
+  ind_list.append(np.clip(bsi, -1, 1))
+  ndsi = (green - swir) / (green + swir + eps)
+  ind_list.append(np.clip(ndsi, -1, 1))
+  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
+  ind_list.append(np.clip(mcari, 0, 10)) 
+  #print(ind_list)
+  #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
+  #ind_names = vi #["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
+  #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
+  '''
 
   indices = np.stack(ind_list, axis=0).astype(np.float32)
 

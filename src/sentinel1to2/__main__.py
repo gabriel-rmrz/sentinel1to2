@@ -1,6 +1,7 @@
 import random
 import csv
 import torch
+import torch.nn as nn
 import yaml
 import argparse
 from pathlib import Path
@@ -15,6 +16,7 @@ from .tools.get_steps import get_steps
 from .tools.get_model import get_model
 from .tools.parse_args import parse_args
 from .models.losses.CombinedLoss import CombinedLoss
+from .models.losses.VGGPerceptualLoss import VGGPerceptualLoss
 from .batch_run_inference import batch_run_inference
 #from .process_scenes import process_scenes
 from .performance import performance
@@ -73,7 +75,7 @@ def main() -> None:
   # TODO: Put the 3 data_loaders in a function 
   # DataLoaders
   val_loader, train_loader = None, None
-  if "training" in steps.keys() or "evaluation" in steps.keys() or "inference" in steps.keys():
+  if "training" in steps.keys() or "evaluation" in steps.keys(): 
     logging.info(f"Loading validation data")
     val_dataset = scene_split_dataset(job_data_dir / config["training"]["data"]["val_dataset"])
     val_loader = DataLoader(
@@ -101,7 +103,10 @@ def main() -> None:
     #criterion = nn.L1Loss() # nn.MSELoss()  # Per regressione
 
     # TODO: Select the loss between different options
-    criterion = CombinedLoss(**config["training"]["loss"]["parameters"])
+    if config['model']['parameters']['target'] == "s2":
+      criterion = CombinedLoss(**config["training"]["loss"]["parameters"])
+    elif  config['model']['parameters']['target'] == 'ndvi':
+      criterion = nn.L1Loss()
     #criterion = CombinedLoss(alpha=1.0, beta=2, gamma=0.1)
     
     # Addestramento
@@ -129,7 +134,7 @@ def main() -> None:
     batch_run_inference(
       config,
       device=device,
-      prefix='val' # use 'val' to load validation scene list
+      sample_type='val' # use 'val' to load validation scene list
     )
     '''
     batch_run_inference(
@@ -141,15 +146,16 @@ def main() -> None:
   if "evaluation" in steps.keys():
     if not "training" in steps.keys():
       model.load_state_dict(torch.load(job_data_dir / config["training"]["model_output"], map_location=device))
-    evaluate_model(model, config, device, val_loader, num_samples= 100000)
+    evaluate_model(model, config, device, val_loader, num_samples= 1000000)
     logging.info(f"Evaluation finished")
   if "performance" in steps.keys():
     pred_dir = job_data_dir / "output_combined/"
-    data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
+    #data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
+    data_dir =Path("data/test")
     
     # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
     # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
-    performance(data_dir, pred_dir, 'test')
+    performance(config, data_dir, pred_dir, 'test')
     logging.info(f"Performance step finished")
   
   return

@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 
     
 def produce_outputs_from_df(df, config, metric_names, prefix):
-  if "veg_index" in df.keys():
-    hist_vars = df["veg_index"].unique()
-    var_type = "veg_index"
-  elif "band" in df.keys():
-    hist_vars = df["band"].unique()
-    var_type = "band"
+  print(df.keys())
+  if "indices" in df.keys():
+    hist_vars = df["indices"].unique()
+    var_type = "indices"
+  elif "bands" in df.keys():
+    hist_vars = df["bands"].unique()
+    var_type = "bands"
 
   means_df = pd.DataFrame(columns=["hist_vars","metric","mean", "std"])
   for mn in metric_names:
@@ -24,9 +25,10 @@ def produce_outputs_from_df(df, config, metric_names, prefix):
       means_df.index = means_df.index + 1
       means_df = means_df.sort_index()
   means_df.to_csv(f"tables/{prefix}_means.csv", index=False)
-  save_df_to_latex(means_df, prefix)
+  save_df_to_latex(means_df, config, prefix)
 
-def save_df_to_latex(df, prefix):
+def save_df_to_latex(df, config, prefix):
+    job_dir = Path(config['job']['dir'])
     # df columns: hist_vars | metric | mean | std
     wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
     wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
@@ -66,7 +68,7 @@ def save_df_to_latex(df, prefix):
                   .replace(r"\midrule", r"\hline")
                   .replace(r"\bottomrule", r"\hline"))
 
-    Path(f"tables/{prefix}_means.tex").write_text(latex)
+    Path(job_dir / f"outputs/tables/{prefix}_means.tex").write_text(latex)
 
 '''
 def save_df_to_latex(df, prefix):

@@ -1,17 +1,17 @@
 # Parameter for the control of the workflow of the analysis pipeline
 
 job:
-  dir: 'jobs/job_20Nov'
+  dir: 'jobs/job_test'
 
 preprocessing:
   patch_dimension: [128,128]
   input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
   #input_dir: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/train"
-  do_norm_params: false 
+  do_norm_params: false
   norm_params_file: "normalization_params.npz"
   precalc_norm_params_path: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
   #precalc_norm_params_path: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/normalization_params.npz"
-  sample_size: 0 # Use 0 to use all the scenes in the training input_dir
+  sample_size: 6 # Use 0 to use all the scenes in the training input_dir
 
 
 model:
@@ -28,10 +28,10 @@ training:
   data:
     train_dataset: "train_dataset_S2.h5"
     val_dataset: "val_dataset_S2.h5"
-    batch_size: 128
-    n_workers: 16
-  n_epochs: 50 
-  patience: 10
+    batch_size: 64
+    n_workers: 8
+  n_epochs: 2 
+  patience: 1
   optimizer: 
     name: "Adam"
     parameters:
@@ -43,9 +43,10 @@ training:
       beta: 2
       gamma: 0.1
 inference:
-  input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test" 
+  #input_dir: "/Users/garamire/Work/AgriIntesa/fromRoberto/share/agri2intesa/s1_to_s2/test" 
+  input_dir: "data/test"
   output_dir: "output_combined/"
-  sample_size: 0 # Use 0 to use all the scenes in the testing input_dir
+  sample_size: 6 # Use 0 to use all the scenes in the testing input_dir
 evaluation:
   scenes_to_plot: 2
 
