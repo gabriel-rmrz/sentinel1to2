@@ -39,6 +39,7 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
   job_tables_dir.mkdir(parents=True, exist_ok=True)
   job_plots_dir.mkdir(parents=True, exist_ok=True)
 
+  target_type = "bands"
   model.eval()
   sampled_preds = []
   sampled_targets = []
@@ -48,15 +49,19 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
     band_names = [band_names[j] for j in selected_bands]
     metric_names =  ["mae", "psnr", "ssim", "r2"]
     gt_vs_inf_df = pd.DataFrame(columns = ['scene','band']+metric_names)
-    gt_vs_comp_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    gt_vs_comp_df = pd.DataFrame(columns = ['scene','indices']+metric_names)
     scene_count = 0
 
     prefix1 = "val_patches_indices_gt_vs_comp"
     table1_path = job_tables_dir / (prefix1 + ".csv")
     gt_vs_comp_file = open(table1_path, 'w')
     prefix2 = "val_patches_bands_gt_vs_inf"
+    gt_vs_comp_file.write(','.join(['scene','indices']+metric_names))
+    gt_vs_comp_file.write('\n')
     table2_path = job_tables_dir / (prefix2 + ".csv")
     gt_vs_inf_file = open(table2_path, 'w')
+    gt_vs_inf_file.write(','.join(['scene',target_type]+metric_names))
+    gt_vs_inf_file.write('\n')
     i = 0
     for inputs, targets, scenes, patch_idx in tqdm(val_loader, "Evaluating batches"):
       inputs, targets = inputs.to(device), targets.to(device)
@@ -168,6 +173,26 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
     gt_vs_comp_file.close()
     gt_vs_inf_file.close()
  
+    if target_type == "bands":
+      gt_vs_comp_df = pd.read_csv(table1_path)
+      produce_outputs_from_df(gt_vs_comp_df, config, metric_names,prefix1)
+      plot_group_metric_histograms(
+          output_dir=Path(job_plots_dir / f'patches/val/indices/metrics'),
+          df=gt_vs_comp_df,              # scene, veg_index, mae, psnr, ssim, r2
+          group_col="indices",
+          metrics=["mae", "psnr", "ssim", "r2"],
+          prefix="gt_vs_comp",
+      )
+    gt_vs_inf_df = pd.read_csv(table2_path)
+    print(gt_vs_inf_df)
+    produce_outputs_from_df(gt_vs_inf_df, config, metric_names,prefix2)
+    plot_group_metric_histograms(
+        output_dir=Path(job_plots_dir / f'patches/val/{target_type}/metrics'),
+        df= gt_vs_inf_df,              # scene, veg_index, mae, psnr, ssim, r2
+        group_col=target_type,
+        metrics=["mae", "psnr", "ssim", "r2"],
+        prefix="gt_vs_inf",
+    )
 
     """
     produce_outputs_from_df(gt_vs_comp_df, config, metric_names,prefix1)
@@ -185,7 +210,7 @@ def evaluate_model(model, config, device, val_loader, num_samples=5):
     plot_group_metric_histograms(
         output_dir=Path(job_plots_dir / 'patches/val/bands/metrics'),
         df= gt_vs_inf_df,              # scene, veg_index, mae, psnr, ssim, r2
-        group_col="band",
+        group_col="bands",
         metrics=["mae", "psnr", "ssim", "r2"],
         prefix="gt_vs_inf",
     )

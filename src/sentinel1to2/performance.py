@@ -62,6 +62,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   # Although, it might take the same time to only produce the plots.
 
   target_type = "bands" # "indices"
+  tile_type = "scenes"
   if target_type == "bands":
     channel_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
     selected_channels = [1,2,3,4,5,6,7,10,11]
@@ -69,7 +70,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
     metric_names =  ["mae", "psnr", "ssim", "r2"] # TODO: We have to add sam here
     #gt_vs_inf_df = pd.DataFrame(columns = ['scene','band']+metric_names)
     #gt_vs_comp_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
-    prefix1 = f"{sample_type}_patches_{target_type}_gt_vs_comp"
+    prefix1 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_comp"
     table1_path = job_tables_dir / (prefix1 + ".csv")
     gt_vs_comp_file = open(table1_path, 'w')
     gt_vs_comp_file.write(','.join(['scene','indices']+metric_names))
@@ -79,7 +80,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
     metric_names =  ["mae", "psnr", "ssim", "r2"] # TODO: We have to add sam here
     #gt_vs_inf_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
 
-  prefix2 = "{sample_type}_patches_{target_type}_gt_vs_inf"
+  prefix2 = "{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
   table2_path = job_tables_dir / (prefix2 + ".csv")
   gt_vs_inf_file = open(table2_path, 'w')
   gt_vs_inf_file.write(','.join(['scene',target_type]+metric_names))
@@ -122,30 +123,30 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
 
       if scene_count < config["evaluation"]["scenes_to_plot"]:
         if target_type == "bands":
-          plot_histo_2d(job_plots_dir / 'scenes/{sample_type}/indices/histos2d',
+          plot_histo_2d(job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d',
               ind_from_gt,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt")
-          plot_histo_2d(job_plots_dir / 'scenes/{sample_type}/indices/histos2d',
+          plot_histo_2d(job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d',
               ind_from_inf,
               ind_names_from_inf,
               dname,
               prefix=f"computed_from_inf")
           plot_comparison_histos_2d(
-              job_plots_dir / 'scenes/{sample_type}/indices/histos2d_comparison',
+              job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d_comparison',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_inf")
-          plot_scatter_gt_vs_inf(job_plots_dir / 'scenes/{sample_type}/indices/scatter_gt_vs_inf',
+          plot_scatter_gt_vs_inf(job_plots_dir / '{tile_type}/{sample_type}/indices/scatter_gt_vs_inf',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_vs_inf")
-          plot_abs_error(job_plots_dir / 'scenes/{sample_type}/indices/histos_abs_error',
+          plot_abs_error(job_plots_dir / '{tile_type}/{sample_type}/indices/histos_abs_error',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
@@ -153,7 +154,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
               prefix=f"computed_from_gt_vs_inf")
 
         plot_comparison_rgb_composites_2d(
-            job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d_comparison',
+            job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d_comparison',
             channels_gt,        # (C, H, W)
             channels_inf,       # (C, H, W)
             channel_names,   # e.g. ["b1","blue","green","red",...,"nir",...]
@@ -162,25 +163,25 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
         )
 
         plot_s2_composites_2d(
-            job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d',
+            job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d',
             channels_gt,        # (C, H, W)
             channel_names,   # e.g. ["b1","blue","green","red","b5",...]
             dname,
             prefix=f"gt",
         )
         plot_s2_composites_2d(
-            job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d',
+            job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d',
             channels_inf,        # (C, H, W)
             channel_names,   # e.g. ["b1","blue","green","red","b5",...]
             dname,
             prefix=f"inf",
         )
-        plot_histo_2d(job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d',
+        plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d',
             channels_gt,
             channel_names,
             dname,
             prefix=f"gt")
-        plot_histo_2d(job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d',
+        plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d',
             channels_inf,
             channel_names,
             dname,
@@ -188,28 +189,28 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
 
 
         plot_comparison_rgb_composites_2d(
-            job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d_comparison',
+            job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d_comparison',
             channels_gt,        # (C, H, W)
             channels_inf,       # (C, H, W)
             channel_names,   # e.g. ["b1","blue","green","red",...,"nir",...]
             dname,
             prefix=f"gt_inf",
         )
-        plot_comparison_histos_2d(job_plots_dir / f'scenes/{sample_type}/{target_type}/histos2d_comparison',
+        plot_comparison_histos_2d(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos2d_comparison',
             channels_gt,
             channels_inf,
             channel_names,
             dname,
             prefix=f"gt_inf")
 
-        plot_scatter_gt_vs_inf(job_plots_dir / f'scenes/{sample_type}/{target_type}/scatter_gt_vs_inf',
+        plot_scatter_gt_vs_inf(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/scatter_gt_vs_inf',
             channels_gt,
             channels_inf,
             channel_names,
             dname,
             prefix=f"gt_vs_inf")
 
-        plot_abs_error(job_plots_dir / f'scenes/{sample_type}/{target_type}/histos_abs_error',
+        plot_abs_error(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/histos_abs_error',
             channels_gt,
             channels_inf,
             channel_names,
@@ -227,7 +228,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
     print(gt_vs_comp_df)
     produce_outputs_from_df(gt_vs_comp_df, config, metric_names,prefix1)
     plot_group_metric_histograms(
-        output_dir=Path(job_plots_dir / f'scenes/{sample_type}/indices/metrics'),
+        output_dir=Path(job_plots_dir / f'{tile_type}/{sample_type}/indices/metrics'),
         df=gt_vs_comp_df,              # scene, veg_index, mae, psnr, ssim, r2
         group_col="indices",
         metrics=["mae", "psnr", "ssim", "r2"],
@@ -237,7 +238,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   print(gt_vs_inf_df)
   produce_outputs_from_df(gt_vs_inf_df, config, metric_names,prefix2)
   plot_group_metric_histograms(
-      output_dir=Path(job_plots_dir / f'scenes/{sample_type}/{target_type}/metrics'),
+      output_dir=Path(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/metrics'),
       df= gt_vs_inf_df,              # scene, veg_index, mae, psnr, ssim, r2
       group_col=target_type,
       metrics=["mae", "psnr", "ssim", "r2"],
