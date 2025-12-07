@@ -153,7 +153,7 @@ def main() -> None:
     
     # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
     # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
-    performance(config, data_dir, pred_dir, 'test')
+    performance(config, 'test')
     logging.info(f"Performance step finished")
   
   return
