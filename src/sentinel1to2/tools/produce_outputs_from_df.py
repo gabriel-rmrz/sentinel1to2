@@ -25,15 +25,15 @@ def produce_outputs_from_df(df, config, metric_names, prefix):
       means_df.index = means_df.index + 1
       means_df = means_df.sort_index()
   means_df.to_csv(f"tables/{prefix}_means.csv", index=False)
-  save_df_to_latex(means_df, config, prefix)
+  save_df_to_latex(means_df, config, metric_names, prefix)
 
-def save_df_to_latex(df, config, prefix):
+def save_df_to_latex(df, config, metric_names, prefix):
     job_dir = Path(config['job']['dir'])
     # df columns: hist_vars | metric | mean | std
     wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
     wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
 
-    order = ["mae", "psnr", "ssim", "r2"]
+    order = metric_names 
     cols = pd.MultiIndex.from_product([order, ["mean", "std"]])
     wide = wide.reindex(columns=cols)
 

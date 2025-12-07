@@ -37,6 +37,7 @@ def read_csv_to_list(path):
         rows.append(row[0])
   return rows
 
+
     
 
 def performance(config, real_dir, pred_dir, sample_type='test'):
@@ -75,20 +76,20 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   list_of_scenes = read_csv_to_list(job_lists_dir / f'{sample_type}_scenes_inferred_list.csv')
   target_type = config["target"]["type"] # "indices"
   tile_type = "scenes"
+  metric_names =  config["performance"][f"{target_type}_metric_names"] 
   if target_type == "bands":
     channel_names = config["target"]["all_bands"]#["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
     selected_channels = config["target"]["selected_bands"] #[1,2,3,4,5,6,7,10,11]
     channel_names = [channel_names[j] for j in selected_channels]
-    metric_names =  config["performance"]["metric_names"] 
 
+    indices_metric_names =  config["performance"]["indices_metric_names"] 
     prefix1 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_comp"
     table1_path = job_tables_dir / (prefix1 + ".csv")
     gt_vs_comp_file = open(table1_path, 'w')
-    gt_vs_comp_file.write(','.join(['scene','indices']+metric_names))
+    gt_vs_comp_file.write(','.join(['scene','indices']+ indices_metric_names))
     gt_vs_comp_file.write('\n')
   else:
     channel_name = ['ndvi']
-    metric_names = config["performance"]["metric_names"] 
 
   prefix2 = "{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
   table2_path = job_tables_dir / (prefix2 + ".csv")
@@ -124,39 +125,52 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
         s2b(GT)
         s2b(I)
       """
+      compute_all_metrics(gt_vs_inf_file, 
+          dname, 
+          channels_gt, 
+          channels_inf, 
+          channel_names,
+          metric_names)
       # put the indices in the config file
-      ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
-      ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, channels_inf)
-
-      compute_all_metrics(gt_vs_comp_file, dname, ind_from_gt, ind_from_inf, ind_names_from_gt)
-      compute_all_metrics(gt_vs_inf_file, dname, channels_gt, channels_inf, channel_names)
+      if target_type == 'bands':
+        ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
+        ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, channels_inf)
+        compute_all_metrics(gt_vs_comp_file, 
+            dname, 
+            ind_from_gt, 
+            ind_from_inf, 
+            ind_names_from_gt,
+            indices_metric_names)
 
       if scene_count < config["evaluation"]["scenes_to_plot"]:
         if target_type == "bands":
-          plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d',
+          job_plots_comp_ind_dir = job_plots_dir / f'{tile_type}/{sample_type}'
+
+          plot_histo_2d( f'{job_plots_comp_ind_dir}/indices/histos2d',
               ind_from_gt,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt")
-          plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d',
+          plot_histo_2d(jf'{job_plots_comp_ind_dir}/indices/histos2d',
               ind_from_inf,
               ind_names_from_inf,
               dname,
               prefix=f"computed_from_inf")
           plot_comparison_histos_2d(
-              job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d_comparison',
+              f'{job_plots_comp_ind_dir}/indices/histos2d_comparison',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_inf")
-          plot_scatter_gt_vs_inf(job_plots_dir / f'{tile_type}/{sample_type}/indices/scatter_gt_vs_inf',
+          plot_scatter_gt_vs_inf(
+              f'{job_plots_comp_ind_dir}/indices/scatter_gt_vs_inf',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_vs_inf")
-          plot_abs_error(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos_abs_error',
+          plot_abs_error(f'{job_plots_comp_ind_dir}/indices/histos_abs_error',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
@@ -236,22 +250,22 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
     print(table1_path)
     gt_vs_comp_df = pd.read_csv(table1_path)
     print(gt_vs_comp_df)
-    produce_outputs_from_df(gt_vs_comp_df, config, metric_names,prefix1)
+    produce_outputs_from_df(gt_vs_comp_df, config, indices_metric_names,prefix1)
     plot_group_metric_histograms(
         output_dir=Path(job_plots_dir / f'{tile_type}/{sample_type}/indices/metrics'),
         df=gt_vs_comp_df,              # scene, veg_index, mae, psnr, ssim, r2
         group_col="indices",
-        metrics=["mae", "psnr", "ssim", "r2"],
+        metrics=indices_metric_names,
         prefix="gt_vs_comp",
     )
   gt_vs_inf_df = pd.read_csv(table2_path)
   print(gt_vs_inf_df)
-  produce_outputs_from_df(gt_vs_inf_df, config, metric_names,prefix2)
+  produce_outputs_from_df(gt_vs_inf_df, config, metric_names, prefix2)
   plot_group_metric_histograms(
       output_dir=Path(job_plots_dir / f'{tile_type}/{sample_type}/{target_type}/metrics'),
       df= gt_vs_inf_df,              # scene, veg_index, mae, psnr, ssim, r2
       group_col=target_type,
-      metrics=["mae", "psnr", "ssim", "r2"],
+      metrics=metric_names,
       prefix="gt_vs_inf",
   )
 
