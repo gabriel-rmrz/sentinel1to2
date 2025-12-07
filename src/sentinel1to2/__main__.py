@@ -136,12 +136,10 @@ def main() -> None:
       device=device,
       sample_type='val' # use 'val' to load validation scene list
     )
-    '''
     batch_run_inference(
       config,
       device=device
     )
-    '''
     logging.info(f"Inference step finished")
   if "evaluation" in steps.keys():
     if not "training" in steps.keys():

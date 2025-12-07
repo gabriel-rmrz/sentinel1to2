@@ -1,8 +1,15 @@
 import logging
+import csv
 from pathlib import Path
 import torch
 import itertools
 from .inference import inference
+
+def write_list_to_csv(path, list_out):
+  with open(path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows([[x] for x in list_out])
+  return
 
 def batch_run_inference(config, device='cuda',sample_type='test'):
   logging.basicConfig(
@@ -11,7 +18,9 @@ def batch_run_inference(config, device='cuda',sample_type='test'):
   )
   job_dir = Path(config["job"]["dir"])
   job_data_dir = job_dir / 'data'
+  job_lists_dir = job_data_dir / 'lists'
   # Get list (if we don't want to run over all the files in the val/test directory)
+  sample_size = config['inference']['sample_size']
   if sample_type == 'val':
     data_dir = config['preprocessing']['input_dir']
     all_scenes = sorted([f.name for f in Path(data_dir).iterdir() if f.is_dir()])
@@ -21,13 +30,15 @@ def batch_run_inference(config, device='cuda',sample_type='test'):
   else:
     data_dir = config['inference']['input_dir']
     all_scenes = sorted([f.name for f in Path(data_dir).iterdir() if f.is_dir()])
-  sample_size = config['inference']['sample_size']
 
   if sample_size == 0 or sample_size > len(all_scenes):
     sample_scenes = all_scenes
     sample_size = len(all_scenes)
   else:
     sample_scenes = all_scenes[:sample_size]
+
+   
+  write_list_to_csv(job_lists_dir / f'{sample_type}_scenes_inferred_list.csv', sample_scenes)
   logging.info(f"Sampling {sample_size} out of {len(all_scenes)} scenes available in {data_dir}")
   '''
   if loader != None:

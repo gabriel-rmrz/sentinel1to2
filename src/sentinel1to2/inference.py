@@ -27,7 +27,7 @@ def inference(config, scene_folder, device='cuda', sample_type='test'):
 
   #model = smp.Unet(encoder_name="efficientnet-b0", in_channels=4, classes=9)
   model = get_model(config)
-  model.load_state_dict(torch.load(model_path, map_location=device), map_location=device)
+  model.load_state_dict(torch.load(model_path, map_location=device))
   model.to(device)
 
   # Carica stack input

@@ -3,6 +3,7 @@ import csv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 from pathlib import Path
 from skimage.metrics import peak_signal_noise_ratio
 from skimage.metrics import structural_similarity  
@@ -28,6 +29,13 @@ from .plotting.plot_histo_2d import plot_histo_2d
 from .plotting.plot_group_metric_histograms import plot_group_metric_histograms
 
 
+def read_csv_to_list(path):
+  rows = []
+  with open(path, newline="") as f:
+    reader = csv.reader(f)
+    for row in reader:
+        rows.append(row[0])
+  return rows
 
     
 
@@ -52,7 +60,10 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   job_outputs_dir = job_dir / 'outputs'
   job_tables_dir = job_outputs_dir / 'tables'
   job_plots_dir = job_outputs_dir / 'plots'
-  real_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test"
+  job_lists_dir = job_data_dir / 'lists'
+  #real_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test"
+  real_dir = config["inference"]["input_dir"]
+  pred_dir = job_data_dir / config["inference"]["output_dir"] 
 
   job_tables_dir.mkdir(parents=True, exist_ok=True)
   job_plots_dir.mkdir(parents=True, exist_ok=True)
@@ -61,15 +72,15 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   #TODO: Give the option to save the indice so they don't need to be recactulated every time. 
   # Although, it might take the same time to only produce the plots.
 
-  target_type = "bands" # "indices"
+  list_of_scenes = read_csv_to_list(job_lists_dir / f'{sample_type}_scenes_inferred_list.csv')
+  target_type = config["target"]["type"] # "indices"
   tile_type = "scenes"
   if target_type == "bands":
-    channel_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
-    selected_channels = [1,2,3,4,5,6,7,10,11]
+    channel_names = config["target"]["all_bands"]#["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
+    selected_channels = config["target"]["selected_bands"] #[1,2,3,4,5,6,7,10,11]
     channel_names = [channel_names[j] for j in selected_channels]
-    metric_names =  ["mae", "psnr", "ssim", "r2"] # TODO: We have to add sam here
-    #gt_vs_inf_df = pd.DataFrame(columns = ['scene','band']+metric_names)
-    #gt_vs_comp_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    metric_names =  config["performance"]["metric_names"] 
+
     prefix1 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_comp"
     table1_path = job_tables_dir / (prefix1 + ".csv")
     gt_vs_comp_file = open(table1_path, 'w')
@@ -77,8 +88,7 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
     gt_vs_comp_file.write('\n')
   else:
     channel_name = ['ndvi']
-    metric_names =  ["mae", "psnr", "ssim", "r2"] # TODO: We have to add sam here
-    #gt_vs_inf_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
+    metric_names = config["performance"]["metric_names"] 
 
   prefix2 = "{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
   table2_path = job_tables_dir / (prefix2 + ".csv")
@@ -87,7 +97,8 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
   gt_vs_inf_file.write('\n')
   ### gt_vs_inf_ndvi_df = pd.DataFrame(columns = ['scene','veg_index']+metric_names)
   scene_count = 0
-  for dname in next(os.walk(real_dir))[1]:
+  #for dname in tqdm(next(os.walk(real_dir))[1], "Perfomance on {sample_type} sample"):
+  for dname in list_of_scenes:
     scene, day = dname.split('_')
     file_paths = [f"{real_dir}/{dname}/{day}_s2.tif",
                   f"{pred_dir}/{sample_type}_{dname}_pred.tif"]
@@ -97,7 +108,6 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
       if not os.path.isfile(fp):
         missing_files.append(fp)
     if len(missing_files)>0:
-      print(f"[SKIP] The following files are missing: {missing_files}")
       continue
     try:
       """
@@ -123,30 +133,30 @@ def performance(config, real_dir, pred_dir, sample_type='test'):
 
       if scene_count < config["evaluation"]["scenes_to_plot"]:
         if target_type == "bands":
-          plot_histo_2d(job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d',
+          plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d',
               ind_from_gt,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt")
-          plot_histo_2d(job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d',
+          plot_histo_2d(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d',
               ind_from_inf,
               ind_names_from_inf,
               dname,
               prefix=f"computed_from_inf")
           plot_comparison_histos_2d(
-              job_plots_dir / '{tile_type}/{sample_type}/indices/histos2d_comparison',
+              job_plots_dir / f'{tile_type}/{sample_type}/indices/histos2d_comparison',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_inf")
-          plot_scatter_gt_vs_inf(job_plots_dir / '{tile_type}/{sample_type}/indices/scatter_gt_vs_inf',
+          plot_scatter_gt_vs_inf(job_plots_dir / f'{tile_type}/{sample_type}/indices/scatter_gt_vs_inf',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
               dname,
               prefix=f"computed_from_gt_vs_inf")
-          plot_abs_error(job_plots_dir / '{tile_type}/{sample_type}/indices/histos_abs_error',
+          plot_abs_error(job_plots_dir / f'{tile_type}/{sample_type}/indices/histos_abs_error',
               ind_from_gt,
               ind_from_inf,
               ind_names_from_gt,
