@@ -399,8 +399,6 @@ CUDA_VISIBLE_DEVICES=0 sentinel1to2 -c configs/test_config.yaml -s training
 
 # ✅ CITATION
 
-If you use this codebase in research:
-
 > Sentinel-1 to Sentinel-2 translation with multi-scale structural losses and pix2pix GAN supervision.
 
 ---
@@ -409,26 +407,6 @@ If you use this codebase in research:
 
 Issues, pull requests and extensions are welcome.
 
-```
-
----
-
-✅ This version is:
-
-- **Fully consistent with your pipeline**
-- **Correctly separated by mode**
-- **Has all commands and paths**
-- **Suitable for GitHub**
-- **Beginner-proof but still technical enough for researchers**
-
----
-
-If you want, I can now also:
-
-- ✅ Add a **Docker install section**
-- ✅ Add a **Troubleshooting section (CUDA / GDAL / torch)**
-- ✅ Add a **Minimal example dataset layout**
-- ✅ Add a **“Common errors & fixes” section**
 ```
 
 
