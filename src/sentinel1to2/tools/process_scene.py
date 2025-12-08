@@ -10,12 +10,17 @@ def process_scene(config, folder, data_dir, hdf5_file, crop_size=128, stride=128
     target_patches = []
 
     
-    ndvi = np.expand_dims(indices[ind_names.index("ndvi")], 0)
-    target =  config["model"]["parameters"]["target"]
-    if target =="s2":
+    target =  config["target"]["type"]
+    if target =="bands":
       H, W = s2_selected.shape[1], s2_selected.shape[2]
-    elif target=='ndvi':
-      H, W = ndvi.shape[1], ndvi.shape[2]
+    elif target=='indices':
+      ind_selected = config["target"]["selected_indices"]
+      indices_ids = [ind_names.index(index)  for index in ind_selected]
+      if len(indices_ids) == 1:
+        indices = np.expand_dims(indices[*indices_ids], 0)
+      else: 
+        indices = np.array([indices[ind_id] for ind_id in indices_ids])
+      H, W = indices.shape[1], indices.shape[2]
     for top in range(0, H - crop_size + 1, stride):
       for left in range(0, W - crop_size + 1, stride):
         input_patch = np.concatenate([
@@ -23,10 +28,10 @@ def process_scene(config, folder, data_dir, hdf5_file, crop_size=128, stride=128
           s1[:, top:top+crop_size, left:left+crop_size],
           worldcover[:, top:top+crop_size, left:left+crop_size]
         ], axis=0)
-        if target =="s2":
+        if target =="bands":
           target_patch = s2_selected[:, top:top+crop_size, left:left+crop_size]  # Es. NDVI come target
-        elif target =="ndvi":
-          target_patch = ndvi[:, top:top+crop_size, left:left+crop_size]  # Es. NDVI come target
+        elif target =="indices":
+          target_patch = indices[:, top:top+crop_size, left:left+crop_size]  # Es. NDVI come target
 
         if np.isnan(input_patch).any() or np.isnan(target_patch).any():
           continue

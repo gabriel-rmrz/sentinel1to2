@@ -21,6 +21,14 @@ from .batch_run_inference import batch_run_inference
 #from .process_scenes import process_scenes
 from .performance import performance
 
+def get_loss(config):
+  if config['target']['type'] == "bands":
+    loss = CombinedLoss(**config["training"]["loss"]["parameters"])
+  elif  config['target']['type'] == 'indices':
+    loss = nn.L1Loss()
+  return loss
+
+
 def check_step_requirements():
   pass
 
@@ -103,10 +111,7 @@ def main() -> None:
     #criterion = nn.L1Loss() # nn.MSELoss()  # Per regressione
 
     # TODO: Select the loss between different options
-    if config['model']['parameters']['target'] == "s2":
-      criterion = CombinedLoss(**config["training"]["loss"]["parameters"])
-    elif  config['model']['parameters']['target'] == 'ndvi':
-      criterion = nn.L1Loss()
+    criterion = get_loss(config)
     #criterion = CombinedLoss(alpha=1.0, beta=2, gamma=0.1)
     
     # Addestramento
@@ -147,13 +152,8 @@ def main() -> None:
     evaluate_model(model, config, device, val_loader, num_samples= 1000000)
     logging.info(f"Evaluation finished")
   if "performance" in steps.keys():
-    pred_dir = job_data_dir / "output_combined/"
-    #data_dir = "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test/"
-    data_dir =Path("data/test")
-    
-    # TODO: Either pass config (I think the best option) or make sure data_dir and pred_dir are used property in all the calls of the scripts.
-    # results = process_scenes(data_dir, pred_dir) #TODO: Check if this part is not redundant with what is done in performance
-    performance(config, 'test')
+    performance(config, 'val')
+    #performance(config, 'test')
     logging.info(f"Performance step finished")
   
   return

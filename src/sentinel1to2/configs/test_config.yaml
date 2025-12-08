@@ -21,8 +21,8 @@ model:
     encoder_name: "efficientnet-b0"
     encoder_weights: "imagenet"
     in_channels: 4
-    classes: 9
-    target: "s2"
+    #classes: 9 # This have to match the number of channels defined in the section target.
+    #target: "s2"
 training:
   model_output: "trained_model.pth" # Path to the output model file.
   data:
@@ -53,8 +53,10 @@ evaluation:
 
 target:
   type: "bands" # bands or indices. 
+  #type: "indices"
   all_bands: ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
   selected_bands: [1,2,3,4,5,6,7,10,11]  # The number of elements of this list should match the number of output classes
+  selected_indices: ["ndvi", "savi"]
 
 performance:
   bands_metric_names: ["mae", "psnr", "ssim"] # TODO: Add sam here

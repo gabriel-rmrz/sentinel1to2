@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 
 from .tools.produce_outputs_from_df import produce_outputs_from_df
@@ -34,6 +35,7 @@ def read_csv_to_list(path: Path) -> List[str]:
 
 def _resolve_data_dirs(
     config: dict,
+    sample_type: str = "test",
 ) -> tuple[Path, Path, Path, Path, Path, Path]:
     """Resolve all directories used in performance().
 
@@ -46,7 +48,10 @@ def _resolve_data_dirs(
     job_lists_dir = job_data_dir / "lists"
 
     # If caller did not pass explicit dirs, fall back to config["inference"]
-    real_dir = Path(config["inference"]["input_dir"])
+    if sample_type == "test":
+      real_dir = Path(config["inference"]["input_dir"])
+    elif sample_type == "val":
+      real_dir = Path(config["preprocessing"]["input_dir"])
 
     pred_dir = Path(config["inference"]["output_dir"])
 
@@ -74,14 +79,6 @@ def performance(
     ----------
     config : dict
         Global configuration dictionary (parsed from YAML).
-    real_dir : Path, optional
-        Directory with *ground-truth* scenes. If None, taken from
-        config["inference"]["input_dir"] (relative to job data dir if not
-        absolute).
-    pred_dir : Path, optional
-        Directory with predicted scenes. If None, taken from
-        config["inference"]["output_dir"] (relative to job data dir if not
-        absolute).
     sample_type : str
         Dataset split name ("train", "val", "test", ...). Used to select
         the scene list CSV and prediction filename prefix.
@@ -93,7 +90,7 @@ def performance(
         job_tables_dir,
         job_plots_dir,
         job_lists_dir,
-    ) = _resolve_data_dirs(config)
+    ) = _resolve_data_dirs(config, sample_type)
 
     target_type = config["target"]["type"]  # "bands" or e.g. "indices"
     tile_type = "scenes"
@@ -103,9 +100,13 @@ def performance(
 
     # Bands configuration (always used for GT S2 loading; indices are derived
     # only if target_type == "bands")
-    all_bands = config["target"]["all_bands"]
     selected_bands = config["target"]["selected_bands"]
-    channel_names = [all_bands[j] for j in selected_bands]
+    selected_indices = config["target"]["selected_indices"]
+    if target_type == "bands":
+      all_bands = config["target"]["all_bands"]
+      channel_names = [all_bands[j] for j in selected_bands]
+    elif target_type == "indices":
+      channel_names = selected_indices
 
     # List of scenes to evaluate (e.g. "test_scenes_inferred_list.csv")
     scene_list_path = job_lists_dir / f"{sample_type}_scenes_inferred_list.csv"
@@ -133,7 +134,7 @@ def performance(
     prefix2 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
     table2_path = job_tables_dir / f"{prefix2}.csv"
     gt_vs_inf_file = open(table2_path, "w")
-    gt_vs_inf_file.write(",".join(["scene", target_type] +  metric_names) + "\n")
+    gt_vs_inf_file.write(",".join(["scene", target_type,  *metric_names]) + "\n")
 
     # ------------------------------------------------------------------
     # Main loop over scenes
@@ -162,8 +163,15 @@ def performance(
             # Load GT and prediction
             # ------------------------------------------------------------------
             # Sentinel-2 GT bands: select subset and rescale to [0, 1]
-            channels_gt = load_image(str(gt_path), selected_bands)
-            channels_gt = channels_gt / 10000.0
+            if target_type == "bands":
+              channels_gt = load_image(str(gt_path), selected_bands)
+              channels_gt = channels_gt / 10000.0
+            elif target_type == "indices":
+              channels_gt = load_image(str(gt_path), selected_bands)
+              ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
+              ind_sel = [ind_names_from_gt.index(ind) for ind in selected_indices]
+              channels_gt = np.array([ind_from_gt[ind] for ind in ind_sel])
+
 
             # Predicted S2 bands / targets: stored already in training scale
             channels_inf = load_image(str(pred_path))
@@ -197,7 +205,7 @@ def performance(
                     ind_from_gt,
                     ind_from_inf,
                     ind_names_from_gt,
-                    metric_names,
+                    indices_metric_names,
                 )
 
             # ------------------------------------------------------------------
