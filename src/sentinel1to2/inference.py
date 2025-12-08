@@ -36,7 +36,17 @@ def inference(config, scene_folder, device='cuda', sample_type='test'):
   print(f"Input shape: {input_stack.shape}")
 
   # Inference
-  output = infer_on_scene(model, input_stack, device)
+  #output = infer_on_scene(model, input_stack, device)
+  # Inference
+  output = infer_on_scene(
+    model,
+    input_stack,
+    device,
+    patch_size=config["preprocessing"]["patch_dimension"][0],
+    stride=32,
+    batch_size=config["inference"].get("batch_size", 4),
+    use_gaussian=config["inference"].get("use_gaussian", True),
+  )
 
   # Salva TIFF
   output_dir.mkdir(parents=True, exist_ok=True)

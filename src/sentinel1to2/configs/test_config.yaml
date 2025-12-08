@@ -106,6 +106,8 @@ inference:
   #input_dir: "/lustrehome/garamire/Remote_sensing/sentinel1to2/src/sentinel1to2/data/test"
   output_dir: "output_combined/"
   sample_size: 6 # Use 0 to use all the scenes in the testing input_dir
+  batch_size: 4
+  use_gaussian: true
 evaluation:
   scenes_to_plot: 2
 
