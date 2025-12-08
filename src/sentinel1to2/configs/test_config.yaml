@@ -36,12 +36,70 @@ training:
     name: "Adam"
     parameters:
       lr: 1e-4 # Learning rate
+  gan:
+    #mode: "none"        # "none" or "pix2pix"
+    mode: "pix2pix"        # "none" or "pix2pix"
+    lambda_recon: 100.0 # weight for reconstruction loss (L1/Combined/IndexStructure)
+    lambda_adv: 1.0     # weight for adversarial loss
+  ## Case for S2 bands
+  #loss:
+  #  name: "CombinedLoss"
+  #  parameters:
+  #    alpha: 1.0       # peso de L1
+  #    beta: 2.0        # peso de SAM
+  #    gamma: 0.1       # peso de VGG
+  #    rgb_indices: [6, 2, 1]   # opcional, por defecto [6,2,1]
+
+  # selected_indices: ["ndvi"]  # o ["ndvi", "gndvi", "ndwi", ...]
   loss:
     name: "CombinedLoss"
     parameters:
-      alpha: 1.0
-      beta: 2
-      gamma: 0.1
+      alpha: 1.0          # L1
+      beta: 1.0           # SAM
+      gamma: 0.5          # peso del término estructural de índices
+      num_scales: 3
+      window_size: 11
+      sigma: 1.5
+
+  #'''
+  #loss:
+  #  name: "VGGPerceptualLoss"
+  #  parameters: {}   # ignored
+  #'''
+
+  #'''
+  #training:
+  #loss:
+  #  name: "L1Loss"
+  #  parameters:
+  #    reduction: "mean"
+  #'''
+  #'''
+  #loss:
+  #  name: "SAM"
+  #  parameters:
+  #    eps: 1.0e-8
+  #'''
+  #''' For NDVI
+  #loss:
+  #  name: "IndexStructureLoss"
+  #  parameters:
+  #    alpha: 1.0      # weight of L1
+  #    beta: 1.0       # weight of multi-scale gradient
+  #    gamma: 0.2      # weight of SSIM
+  #    num_scales: 3
+  #    window_size: 11
+  #    sigma: 1.5
+  #'''
+  #''' for  selected_indices: ["ndvi", "gndvi", "ndwi"]
+  #loss:
+  #  name: "IndexStructureLoss"
+  #  parameters:
+  #    alpha: 1.0
+  #    beta: 0.5
+  #    gamma: 0.3
+  #'''
+
 inference:
   #input_dir: "data/test"
   input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test" 
@@ -52,8 +110,8 @@ evaluation:
   scenes_to_plot: 2
 
 target:
-  type: "bands" # bands or indices. 
-  #type: "indices"
+  #type: "bands" # bands or indices. 
+  type: "indices"
   all_bands: ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
   selected_bands: [1,2,3,4,5,6,7,10,11]  # The number of elements of this list should match the number of output classes
   selected_indices: ["ndvi", "savi"]

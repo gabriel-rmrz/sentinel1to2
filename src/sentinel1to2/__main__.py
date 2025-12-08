@@ -18,15 +18,51 @@ from .tools.parse_args import parse_args
 from .models.losses.CombinedLoss import CombinedLoss
 from .models.losses.VGGPerceptualLoss import VGGPerceptualLoss
 from .batch_run_inference import batch_run_inference
-#from .process_scenes import process_scenes
-from .performance import performance
+import torch.nn as nn
 
+
+from .models.patchgan import PatchGANDiscriminator
+from .models.losses.index_structure_losses import IndexStructureLoss
+from .models.losses.CombinedLoss import CombinedLoss
+from .models.losses.VGGPerceptualLoss import VGGPerceptualLoss
+from .models.losses.sam_loss import sam_loss  # add this import
+
+from .performance import performance
+def get_loss(config) -> nn.Module:
+    loss_cfg = config.get("training", {}).get("loss", {})
+    name = loss_cfg.get("name", "L1Loss")
+    params = dict(loss_cfg.get("parameters", {}) or {})
+
+    target_type = config["target"]["type"]
+    name_lower = str(name).lower()
+
+    if target_type == "bands" and name_lower in ("combinedloss", "combined"):
+        return CombinedLoss(target_type="bands", **params)
+
+    if target_type == "indices" and name_lower in ("combinedloss", "combined", "indexstructureloss", "index_structure"):
+        # Redirigimos automáticamente CombinedLoss → IndexStructureLoss
+        return IndexStructureLoss(**params)
+
+    # ----------------- Pérdidas estándar de PyTorch ------------
+
+    if name_lower in ("l1", "l1loss", "mae"):
+        return nn.L1Loss(**params)
+
+    if name_lower in ("mse", "mseloss"):
+        return nn.MSELoss(**params)
+
+    if name_lower in ("smoothl1", "huber"):
+        return nn.SmoothL1Loss(**params)
+
+    raise ValueError(f"Unknown loss '{name}' in config['training']['loss']['name']")
+'''
 def get_loss(config):
   if config['target']['type'] == "bands":
     loss = CombinedLoss(**config["training"]["loss"]["parameters"])
   elif  config['target']['type'] == 'indices':
     loss = nn.L1Loss()
   return loss
+'''
 
 
 def check_step_requirements():
@@ -75,9 +111,58 @@ def main() -> None:
       return
 
   # Caricamento dataset
+
+
+  model = get_model(config).to(device)         # this is your UNet (generator)
+  criterion = get_loss(config)                 # reconstruction / structural loss
+  
+  optimizer_G = torch.optim.Adam(
+      model.parameters(),
+      lr=float(config["training"]["optimizer"]["parameters"]["lr"]),
+      betas=(0.5, 0.999),
+  )
+  
+  gan_cfg = config["training"].get("gan", {})
+  gan_mode = gan_cfg.get("mode", "none")
+  
+  discriminator = None
+  optimizer_D = None
+  
+  target_type = config["target"]["type"]
+
+  if target_type == "bands":
+    out_ch = len(config["target"]["selected_bands"])
+  elif target_type == "indices":
+    out_ch = len(config["target"]["selected_indices"])
+
+  if gan_mode == "pix2pix":
+      in_ch = config["model"]["parameters"]["in_channels"]
+      out_ch = out_ch 
+      discriminator = PatchGANDiscriminator(in_channels=in_ch + out_ch).to(device)
+      optimizer_D = torch.optim.Adam(
+          discriminator.parameters(),
+          lr=float(config["training"]["optimizer"]["parameters"]["lr"]),
+          #lr=config["training"]["learning_rate"],
+          betas=(0.5, 0.999),
+      )
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   
   logging.info(f"Making use of model {config['model']['name']}")
-  model = get_model(config)
 
   # TODO: Add test_loader 
   # TODO: Put the 3 data_loaders in a function 
@@ -95,7 +180,6 @@ def main() -> None:
       pin_memory= torch.cuda.is_available()
     )
 
-  model = model.to(device)
   if 'training' in steps.keys():
     logging.info(f"Loading training data")
     train_dataset = scene_split_dataset(job_data_dir / config["training"]["data"]["train_dataset"])
@@ -107,25 +191,24 @@ def main() -> None:
     )
     #print( sum(p.numel() for p in model.parameters() if p.requires_grad) )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(config["training"]["optimizer"]["parameters"]["lr"]))
+    #optimizer = torch.optim.Adam(model.parameters(), lr=float(config["training"]["optimizer"]["parameters"]["lr"]))
     #criterion = nn.L1Loss() # nn.MSELoss()  # Per regressione
 
-    # TODO: Select the loss between different options
-    criterion = get_loss(config)
-    #criterion = CombinedLoss(alpha=1.0, beta=2, gamma=0.1)
     
     # Addestramento
     # TODO: epochs and patience are not necessary if we have the cofig (?)
     train_losses, val_losses = train_model(
-      model,
-      device,
-      config,
-      train_loader,
-      val_loader,
-      criterion,
-      optimizer,
+      model=model,
+      device=device,
+      config=config,
+      train_loader=train_loader,
+      val_loader=val_loader,
+      criterion=criterion,
+      optimizer_G=optimizer_G,
+      discriminator=discriminator,
+      optimizer_D=optimizer_D,
       epochs=config["training"]["n_epochs"],
-      patience=config["training"]["patience"]
+      patience=config["training"]["patience"],
     )
     output_train_losses_path = job_outputs_dir / "train_losses.csv"
     output_val_losses_path = job_outputs_dir / "val_losses.csv"
