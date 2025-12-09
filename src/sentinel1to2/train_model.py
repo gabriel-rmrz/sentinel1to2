@@ -50,6 +50,7 @@ def train_model(
         logging.info("Using pure supervised mode (no GAN).")
 
     for epoch in range(epochs):
+        logging.info(f"Epoch {epoch+1}/{epochs}")
         # ===================== TRAIN =====================
         model.train()
         if use_gan:
@@ -118,7 +119,7 @@ def train_model(
 
         with torch.no_grad():
 
-            for inputs, targets, _scene, _patch_idx in train_loader:
+            for inputs, targets, _scene, _patch_idx in val_loader:
                 inputs, targets = inputs.to(device), targets.to(device)
 
                 outputs = model(inputs)
@@ -138,7 +139,6 @@ def train_model(
         else:
             no_improve += 1
 
-        logging.info(f"Epoch {epoch+1}/{epochs}")
         logging.info(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
         if no_improve >= patience:
