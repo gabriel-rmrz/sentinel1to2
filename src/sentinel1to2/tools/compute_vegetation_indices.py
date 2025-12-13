@@ -1,98 +1,188 @@
+from __future__ import annotations
+
 import numpy as np
+from typing import Dict, Any, List, Tuple, Callable
 
-def compute_vegetation_indices(config, s2):
-  """
-  inputs:
-    s2: We are considering only the bands relevants for our pipeline. If we have all sentinel bands, we are suposed to filter
-        leaving only the 'selected' band defined below:
-          band_names = ["b1","blue", "green", "red", "b5", "rededge", "b7", "nir","b8a","b9", "b10", "swir", "b12"]
-          selected_bands = [1,2,3,4,5,6,7,10,11]
-  """
-  # Bande Sentinel-2 standardizzate
-  blue   = s2[0]  # B2
-  green  = s2[1]  # B3
-  red    = s2[2]  # B4
-  b5 = s2[3]  # B5
-  rededge = s2[4] # B6
-  nir    = s2[6]  # B8
-  swir   = s2[8] # B12
 
-  eps = 1e-6
-  #TODO: the order of vi have to match the order of the indices for the 
-  # method load_and_stack to work properly. Change the logic
+def _safe_div(num: np.ndarray, den: np.ndarray, eps: float) -> np.ndarray:
+    return num / (den + eps)
 
-  vi = config['params']['vegetation_indices']
-  ind_list = []
-  ndvi = (nir - red) / (nir + red + eps)
-  ind_list.append(ndvi)
-  gndvi = (nir - green) / (nir + green + eps)
-  ind_list.append(gndvi)
-  ndre = (nir - rededge) / (nir + rededge + eps)
-  ind_list.append(ndre)
-  reci = (nir / (rededge + eps)) - 1
-  ind_list.append(reci)
-  msi = swir / (nir + eps)
-  ind_list.append(msi)
-  ndwi = (green - nir) / (green + nir + eps)
-  ind_list.append(ndwi)
-  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-  ind_list.append(evi)
-  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-  ind_list.append(savi)
-  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-  ind_list.append(arvi)
-  cig = (nir - green) / (green + eps)
-  ind_list.append(cig)
-  cire = (nir - rededge) / (rededge + eps)
-  ind_list.append(cire) 
-  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-  ind_list.append(bsi)
-  ndsi = (green - swir) / (green + swir + eps)
-  ind_list.append(ndsi)
-  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-  ind_list.append(mcari) 
-  #print(ind_list)
-  #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
-  #ind_names = vi #["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
-  #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
 
-  '''
-  # === Indici Spettrali ===
-  ind_list = []
-  ndvi = (nir - red) / (nir + red + eps)
-  ind_list.append(np.clip(ndvi, -1, 1))
-  gndvi = (nir - green) / (nir + green + eps)
-  ind_list.append(np.clip(gndvi, -1, 1))
-  ndre = (nir - rededge) / (nir + rededge + eps)
-  ind_list.append(np.clip(ndre, -1, 1))
-  reci = (nir / (rededge + eps)) - 1
-  ind_list.append(np.clip(reci, -1, 10))
-  msi = swir / (nir + eps)
-  ind_list.append(np.clip(msi, 0, 10))
-  ndwi = (green - nir) / (green + nir + eps)
-  ind_list.append(np.clip(ndwi, -1, 1))
-  evi = 2.5 * (nir - red) / (nir + 6 * red - 7.5 * blue + 1 + eps)
-  ind_list.append(np.clip(evi, 0, 2))
-  savi = ((nir - red) / (nir + red + 0.5)) * (1.5)
-  ind_list.append(np.clip(savi, -1, 1))
-  arvi = (nir - (2 * red - blue)) / (nir + (2 * red - blue) + eps)
-  ind_list.append(np.clip(arvi, -1, 1))
-  cig = (nir - green) / (green + eps)
-  ind_list.append(np.clip(cig, -1, 1))
-  cire = (nir - rededge) / (rededge + eps)
-  ind_list.append(np.clip(cire, 0, 10)) 
-  bsi = ((red + swir) - (nir + blue)) / ((red + swir) + (nir + blue) + eps)
-  ind_list.append(np.clip(bsi, -1, 1))
-  ndsi = (green - swir) / (green + swir + eps)
-  ind_list.append(np.clip(ndsi, -1, 1))
-  mcari = ((b5 - red) - 0.2*(b5 - green)) * b5 / (red + eps)
-  ind_list.append(np.clip(mcari, 0, 10)) 
-  #print(ind_list)
-  #msavi = (2*nir + 1 - np.sqrt(np.power(2*nir+1,2) - 8 *(nir - red)))/2.
-  #ind_names = vi #["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari"]
-  #ind_names = ["ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi", "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari", "msavi"]
-  '''
+def compute_vegetation_indices(
+    config: Dict[str, Any],
+    s2_selected: np.ndarray,
+    indices_to_compute: List[str] | None = None,
+    eps: float = 1e-6,
+    clip: bool = False,
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Compute vegetation indices from Sentinel-2 selected bands.
 
-  indices = np.stack(ind_list, axis=0).astype(np.float32)
+    Parameters
+    ----------
+    config:
+      Must contain:
+        - config["target"]["all_bands"]: list[str]
+        - config["target"]["selected_bands"]: list[int]
+      Optionally:
+        - config["target"]["selected_indices"]: list[str]  (used if indices_to_compute is None and target.type=="indices")
+        - config["params"]["vegetation_indices"] is NOT used anymore.
 
-  return indices, vi 
+    s2_selected:
+      Array of shape (C, H, W) containing only the selected S2 bands,
+      in the SAME order as config["target"]["selected_bands"].
+
+    indices_to_compute:
+      List of index names to compute, e.g. ["ndvi","savi"].
+      If None:
+        - if target.type == "indices": uses config["target"]["selected_indices"]
+        - else: computes the full supported set (ordered)
+
+    eps:
+      small number to avoid division by zero
+
+    clip:
+      If True, clips indices to typical ranges (conservative defaults).
+
+    Returns
+    -------
+    indices: np.ndarray
+      Array (K, H, W) with computed indices in the same order as returned names.
+    names: list[str]
+      Names of indices in the same order.
+    """
+
+    target_cfg = config.get("target", {})
+    all_bands = target_cfg.get("all_bands", [])
+    selected_bands = target_cfg.get("selected_bands", [])
+
+    if not all_bands or not selected_bands:
+        raise KeyError("config['target']['all_bands'] and config['target']['selected_bands'] must be defined.")
+
+    # Build mapping: band_name -> channel index inside s2_selected
+    # selected_bands are indices into all_bands
+    selected_band_names = [all_bands[i] for i in selected_bands]
+    band_pos = {name: j for j, name in enumerate(selected_band_names)}
+
+    def B(name: str) -> np.ndarray:
+        if name not in band_pos:
+            raise KeyError(
+                f"Band '{name}' not available in s2_selected. "
+                f"Available selected bands: {selected_band_names}"
+            )
+        return s2_selected[band_pos[name]]
+
+    # Required bands (common names based on your all_bands list)
+    blue = B("blue")
+    green = B("green")
+    red = B("red")
+    b5 = B("b5")
+    rededge = B("rededge")
+    nir = B("nir")
+    swir = B("swir")
+
+    # ------------------------------------------------------------
+    # Define index functions (name -> callable)
+    # ------------------------------------------------------------
+    def ndvi():
+        return _safe_div(nir - red, nir + red, eps)
+
+    def gndvi():
+        return _safe_div(nir - green, nir + green, eps)
+
+    def ndre():
+        return _safe_div(nir - rededge, nir + rededge, eps)
+
+    def reci():
+        return (nir / (rededge + eps)) - 1.0
+
+    def msi():
+        return swir / (nir + eps)
+
+    def ndwi():
+        return _safe_div(green - nir, green + nir, eps)
+
+    def evi():
+        return 2.5 * _safe_div(nir - red, (nir + 6.0 * red - 7.5 * blue + 1.0), eps)
+
+    def savi():
+        # L=0.5, factor=1.5
+        return 1.5 * _safe_div(nir - red, nir + red + 0.5, eps)
+
+    def arvi():
+        return _safe_div(nir - (2.0 * red - blue), nir + (2.0 * red - blue), eps)
+
+    def cig():
+        return _safe_div(nir - green, green, eps)
+
+    def cire():
+        return _safe_div(nir - rededge, rededge, eps)
+
+    def bsi():
+        return _safe_div((red + swir) - (nir + blue), (red + swir) + (nir + blue), eps)
+
+    def ndsi():
+        return _safe_div(green - swir, green + swir, eps)
+
+    def mcari():
+        return (((b5 - red) - 0.2 * (b5 - green)) * b5) / (red + eps)
+
+    INDEX_FUNCS: Dict[str, Callable[[], np.ndarray]] = {
+        "ndvi": ndvi,
+        "gndvi": gndvi,
+        "ndre": ndre,
+        "reci": reci,
+        "msi": msi,
+        "ndwi": ndwi,
+        "evi": evi,
+        "savi": savi,
+        "arvi": arvi,
+        "cig": cig,
+        "cire": cire,
+        "bsi": bsi,
+        "ndsi": ndsi,
+        "mcari": mcari,
+    }
+
+    # Default order (stable)
+    DEFAULT_ORDER = [
+        "ndvi", "gndvi", "ndre", "reci", "msi", "ndwi", "evi",
+        "savi", "arvi", "cig", "cire", "bsi", "ndsi", "mcari",
+    ]
+
+    # Determine which indices to compute
+    if indices_to_compute is None:
+        if target_cfg.get("type", "").lower() == "indices":
+            indices_to_compute = list(target_cfg.get("selected_indices", []))
+            if not indices_to_compute:
+                raise KeyError("target.type='indices' but target.selected_indices is empty.")
+        else:
+            indices_to_compute = DEFAULT_ORDER
+
+    # Validate
+    missing = [name for name in indices_to_compute if name not in INDEX_FUNCS]
+    if missing:
+        raise ValueError(f"Unknown vegetation indices requested: {missing}. Supported: {sorted(INDEX_FUNCS.keys())}")
+
+    # Compute in requested order
+    out_list = []
+    out_names = []
+
+    for name in indices_to_compute:
+        arr = INDEX_FUNCS[name]().astype(np.float32, copy=False)
+
+        if clip:
+            # conservative clipping (you can tune these later)
+            if name in ("ndvi", "gndvi", "ndre", "ndwi", "arvi", "bsi", "ndsi", "savi"):
+                arr = np.clip(arr, -1.0, 1.0)
+            elif name in ("evi",):
+                arr = np.clip(arr, -1.0, 2.0)
+            elif name in ("msi", "reci", "cire", "mcari", "cig"):
+                arr = np.clip(arr, -10.0, 10.0)
+
+        out_list.append(arr)
+        out_names.append(name)
+
+    indices = np.stack(out_list, axis=0).astype(np.float32, copy=False)
+    return indices, out_names
+

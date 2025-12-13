@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import csv
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import pandas as pd
 import numpy as np
@@ -10,9 +12,8 @@ from .tools.produce_outputs_from_df import produce_outputs_from_df
 from .tools.compute_vegetation_indices import compute_vegetation_indices
 from .tools.load_image import load_image
 from .tools.compute_metrics import compute_all_metrics
-from .plotting.plot_comparison_rgb_composites_2d import (
-    plot_comparison_rgb_composites_2d,
-)
+
+from .plotting.plot_comparison_rgb_composites_2d import plot_comparison_rgb_composites_2d
 from .plotting.plot_comparison_histos_2d import plot_comparison_histos_2d
 from .plotting.plot_s2_composites_2d import plot_s2_composites_2d
 from .plotting.plot_scatter_gt_vs_inf import plot_scatter_gt_vs_inf
@@ -24,357 +25,345 @@ from .plotting.plot_group_metric_histograms import plot_group_metric_histograms
 def read_csv_to_list(path: Path) -> List[str]:
     """Read a one-column CSV and return the first column as a list of strings."""
     rows: List[str] = []
+    if not path.exists():
+        raise FileNotFoundError(f"Scene list CSV not found: {path}")
+
     with path.open(newline="") as f:
         reader = csv.reader(f)
         for row in reader:
             if not row:
                 continue
-            rows.append(row[0])
+            rows.append(row[0].strip())
     return rows
 
 
-def _resolve_data_dirs(
-    config: dict,
-    sample_type: str = "test",
-) -> tuple[Path, Path, Path, Path, Path, Path]:
-    """Resolve all directories used in performance().
-
+def _get_dirs(config: dict, sample_type: str):
     """
-    job_dir = Path(config["job"]["dir"])
-    job_data_dir = job_dir / "data"
-    job_outputs_dir = job_dir / "outputs"
-    job_tables_dir = job_outputs_dir / "tables"
-    job_plots_dir = job_outputs_dir / "plots"
-    job_lists_dir = job_data_dir / "lists"
-
-    # If caller did not pass explicit dirs, fall back to config["inference"]
-    if sample_type == "test":
-      real_dir = Path(config["inference"]["input_dir"])
-    elif sample_type == "val":
-      real_dir = Path(config["preprocessing"]["input_dir"])
-
-    pred_dir = Path(config["inference"]["output_dir"])
-
-    job_tables_dir.mkdir(parents=True, exist_ok=True)
-    job_plots_dir.mkdir(parents=True, exist_ok=True)
-
-    return real_dir, pred_dir, job_data_dir, job_tables_dir, job_plots_dir, job_lists_dir
-
-
-def performance(
-    config: dict,
-    sample_type: str = "test",
-) -> None:
+    Returns:
+      real_dir: directory holding GT scenes
+      pred_dir: directory holding predicted GeoTIFFs
+      scene_list_path: CSV of scenes inferred
+      tables_dir: output tables
+      plots_dir: output plots (scene-level)
     """
-    Evaluate model performance on full Sentinel-2 scenes.
+    if "paths" not in config or "run_dir" not in config["paths"]:
+        raise KeyError("config['paths']['run_dir'] not found. Resolve paths in __main__.py first.")
 
-    This function:
-      * Loads GT Sentinel-2 scenes and predicted scenes.
-      * Computes per-band metrics (always).
-      * Optionally computes vegetation indices from S2 bands (only if
-        target_type == "bands") and metrics on those indices.
-      * Writes summary CSVs and produces plots.
+    run_dir = Path(config["paths"]["run_dir"])
 
-    Parameters
-    ----------
-    config : dict
-        Global configuration dictionary (parsed from YAML).
-    sample_type : str
-        Dataset split name ("train", "val", "test", ...). Used to select
-        the scene list CSV and prediction filename prefix.
+    # GT directory depends on split
+    if sample_type == "val":
+        real_dir = Path(config["preprocessing"]["input_dir"])
+    else:
+        real_dir = Path(config["inference"]["input_dir"])
+
+    # Predictions live under run_dir
+    # Default to run_dir/inference/<sample_type>/
+    pred_subdir = config.get("inference", {}).get("output_subdir", f"inference/{sample_type}")
+    # if user sets output_subdir to "inference/test", but we are evaluating "val",
+    # we don't want to mix. Prefer explicit per split:
+    # - if output_subdir already contains "val" or "test" we respect it,
+    # - otherwise we append sample_type.
+    pred_dir = run_dir / pred_subdir
+    if pred_dir.name not in ("val", "test") and sample_type in ("val", "test"):
+        # if output_subdir is generic like "inference", use inference/<sample_type>
+        # but don't break if the user already set a split-specific subdir
+        if pred_subdir.endswith("inference") or pred_subdir.endswith("inference/"):
+            pred_dir = run_dir / "inference" / sample_type
+
+    # Scene list written by batch_run_inference
+    scene_list_path = run_dir / "inference" / "lists" / f"{sample_type}_scenes_inferred_list.csv"
+
+    tables_dir = run_dir / "metrics" / "tables"
+    plots_dir = run_dir / "plots" / "scenes" / sample_type  # scene-level plots
+    tables_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    return run_dir, real_dir, pred_dir, scene_list_path, tables_dir, plots_dir
+
+
+def _get_channel_names(config: dict, target_type: str) -> List[str]:
+    if target_type == "indices":
+        return list(config["target"]["selected_indices"])
+
+    # bands
+    all_bands = config["target"]["all_bands"]
+    selected_bands = config["target"]["selected_bands"]
+    return [all_bands[j] for j in selected_bands]
+
+
+def performance(config: dict, sample_type: str = "test") -> None:
     """
-    (
-        real_dir,
-        pred_dir,
-        job_data_dir,
-        job_tables_dir,
-        job_plots_dir,
-        job_lists_dir,
-    ) = _resolve_data_dirs(config, sample_type)
+    Evaluate model performance on full scenes (GeoTIFFs).
 
-    target_type = config["target"]["type"]  # "bands" or e.g. "indices"
+    Reads:
+      - GT scenes from preprocessing.input_dir (val) or inference.input_dir (test)
+      - Pred scenes from run_dir/inference/<sample_type>/
+      - Scene list from run_dir/inference/lists/<sample_type>_scenes_inferred_list.csv
+
+    Writes:
+      - tables to run_dir/metrics/tables/
+      - plots to run_dir/plots/scenes/<sample_type>/
+    """
+    run_dir, real_dir, pred_dir, scene_list_path, tables_dir, plots_dir = _get_dirs(config, sample_type)
+
+    target_type = config["target"]["type"]  # "bands" or "indices"
     tile_type = "scenes"
 
-    # Metric names depend on what the network is predicting
+    # metric names depend on target type
     metric_names = config["performance"][f"{target_type}_metric_names"]
 
-    # Bands configuration (always used for GT S2 loading; indices are derived
-    # only if target_type == "bands")
-    selected_bands = config["target"]["selected_bands"]
-    selected_indices = config["target"]["selected_indices"]
-    if target_type == "bands":
-      all_bands = config["target"]["all_bands"]
-      channel_names = [all_bands[j] for j in selected_bands]
-    elif target_type == "indices":
-      channel_names = selected_indices
+    # channel names for outputs
+    channel_names = _get_channel_names(config, target_type)
 
-    # List of scenes to evaluate (e.g. "test_scenes_inferred_list.csv")
-    scene_list_path = job_lists_dir / f"{sample_type}_scenes_inferred_list.csv"
+    # For indices evaluation (when target_type == indices), we may need to derive GT indices from GT S2 bands.
+    selected_bands = config["target"].get("selected_bands", [])
+    selected_indices = config["target"].get("selected_indices", [])
+
+    # List of scenes to evaluate
     list_of_scenes = read_csv_to_list(scene_list_path)
 
-    # ------------------------------------------------------------------
     # Output CSVs
-    #   1) GT indices vs indices from INF (only if target_type == "bands")
-    #   2) GT bands vs predicted bands (always)
-    # ------------------------------------------------------------------
-    gt_vs_comp_file = None
     indices_metric_names = None
+    gt_vs_comp_path = None
+    prefix1 = None
+
     if target_type == "bands":
         indices_metric_names = config["performance"]["indices_metric_names"]
         prefix1 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_comp"
-        table1_path = job_tables_dir / f"{prefix1}.csv"
-        gt_vs_comp_file = open(table1_path, "w")
-        gt_vs_comp_file.write(",".join(["scene", "indices", *indices_metric_names]) + "\n")
-    else:
-        # When the target is vegetation indices directly, we do not recompute them
-        # from S2 bands here; only GT-vs-INF metrics on the target itself.
-        prefix1 = None
-        table1_path = None
+        gt_vs_comp_path = tables_dir / f"{prefix1}.csv"
 
     prefix2 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
-    table2_path = job_tables_dir / f"{prefix2}.csv"
-    gt_vs_inf_file = open(table2_path, "w")
-    gt_vs_inf_file.write(",".join(["scene", target_type,  *metric_names]) + "\n")
+    gt_vs_inf_path = tables_dir / f"{prefix2}.csv"
 
-    # ------------------------------------------------------------------
-    # Main loop over scenes
-    # ------------------------------------------------------------------
+    scenes_to_plot = int(config.get("evaluation", {}).get("scenes_to_plot", 0))
     scene_count = 0
-    scenes_to_plot = config["evaluation"]["scenes_to_plot"]
 
-    for dname in tqdm(list_of_scenes, desc=f"Performance on {sample_type} sample"):
-        # Scene folder is expected to be "{scene}_{day}"
-        try:
-            scene, day = dname.split("_")
-        except ValueError:
-            print(f"[SKIP] '{dname}' does not match 'scene_day' pattern")
-            continue
+    # Open CSV writers
+    gt_vs_comp_file = None
+    if target_type == "bands":
+        gt_vs_comp_file = open(gt_vs_comp_path, "w")
+        gt_vs_comp_file.write(",".join(["scene", "indices", *indices_metric_names]) + "\n")
 
-        gt_path = real_dir / dname / f"{day}_s2.tif"
-        pred_path = job_data_dir / pred_dir / f"{sample_type}_{dname}_pred.tif"
+    with open(gt_vs_inf_path, "w") as gt_vs_inf_file:
+        gt_vs_inf_file.write(",".join(["scene", target_type, *metric_names]) + "\n")
 
-        missing_files = [str(p) for p in (gt_path, pred_path) if not p.is_file()]
-        if missing_files:
-            print(f"[SKIP] Missing files for scene {dname}: {missing_files}")
-            continue
+        # Loop scenes
+        for dname in tqdm(list_of_scenes, desc=f"Performance on {sample_type} sample"):
+            # Scene folder expected: "{scene}_{day}" (your convention)
+            try:
+                scene, day = dname.split("_", 1)
+            except ValueError:
+                print(f"[SKIP] '{dname}' does not match 'scene_day' pattern")
+                continue
 
-        try:
-            # ------------------------------------------------------------------
-            # Load GT and prediction
-            # ------------------------------------------------------------------
-            # Sentinel-2 GT bands: select subset and rescale to [0, 1]
-            if target_type == "bands":
-              channels_gt = load_image(str(gt_path), selected_bands)
-              channels_gt = channels_gt / 10000.0
-            elif target_type == "indices":
-              channels_gt = load_image(str(gt_path), selected_bands)
-              ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
-              ind_sel = [ind_names_from_gt.index(ind) for ind in selected_indices]
-              channels_gt = np.array([ind_from_gt[ind] for ind in ind_sel])
+            gt_path = real_dir / dname / f"{day}_s2.tif"
 
+            # New inference naming: {sample_type}__{scene_folder}__pred.tif
+            pred_path = pred_dir / f"{sample_type}__{dname}__pred.tif"
 
-            # Predicted S2 bands / targets: stored already in training scale
-            channels_inf = load_image(str(pred_path))
+            missing = [str(p) for p in (gt_path, pred_path) if not p.is_file()]
+            if missing:
+                print(f"[SKIP] Missing files for scene {dname}: {missing}")
+                continue
 
-            # ------------------------------------------------------------------
-            # Compute per-target metrics (bands or indices, depending on target_type)
-            # ------------------------------------------------------------------
-            compute_all_metrics(
-                gt_vs_inf_file,
-                dname,
-                channels_gt,
-                channels_inf,
-                channel_names,
-                metric_names,
-            )
-
-            # ------------------------------------------------------------------
-            # Optional: compute vegetation indices metrics only if target is bands
-            # ------------------------------------------------------------------
-            if target_type == "bands" and gt_vs_comp_file is not None:
-                ind_from_gt, ind_names_from_gt = compute_vegetation_indices(
-                    config, channels_gt
-                )
-                ind_from_inf, ind_names_from_inf = compute_vegetation_indices(
-                    config, channels_inf
-                )
-
-                compute_all_metrics(
-                    gt_vs_comp_file,
-                    dname,
-                    ind_from_gt,
-                    ind_from_inf,
-                    ind_names_from_gt,
-                    indices_metric_names,
-                )
-
-            # ------------------------------------------------------------------
-            # Scene-level plots (only for a subset of scenes)
-            # ------------------------------------------------------------------
-            if scene_count < scenes_to_plot:
-                # If we have bands as target, also plot index-based diagnostics
+            try:
+                # -----------------------------
+                # Load GT / INF
+                # -----------------------------
                 if target_type == "bands":
-                    job_plots_comp_ind_dir = job_plots_dir / f"{tile_type}/{sample_type}"
+                    # GT bands selected (scaled to [0, 1])
+                    channels_gt = load_image(str(gt_path), selected_bands) / 10000.0
+                else:
+                    # target_type == "indices":
+                    # derive GT indices from GT S2 bands
+                    s2_gt = load_image(str(gt_path), selected_bands) / 10000.0
+                    ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, s2_gt)
 
-                    plot_histo_2d(
-                        f"{job_plots_comp_ind_dir}/indices/histos2d",
-                        ind_from_gt,
-                        ind_names_from_gt,
+                    # select only indices in config["target"]["selected_indices"]
+                    sel_idx = [ind_names_from_gt.index(ind) for ind in selected_indices]
+                    channels_gt = np.array([ind_from_gt[i] for i in sel_idx])
+
+                # INF predicted target (already in expected scale)
+                channels_inf = load_image(str(pred_path))
+
+                # -----------------------------
+                # Metrics on target (bands or indices)
+                # -----------------------------
+                compute_all_metrics(
+                    gt_vs_inf_file,
+                    dname,
+                    channels_gt,
+                    channels_inf,
+                    channel_names,
+                    metric_names,
+                )
+
+                # -----------------------------
+                # Optional: indices computed from bands
+                # -----------------------------
+                if target_type == "bands" and gt_vs_comp_file is not None:
+                    ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
+                    ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, channels_inf)
+
+                    compute_all_metrics(
+                        gt_vs_comp_file,
                         dname,
-                        prefix="computed_from_gt",
+                        ind_from_gt,
+                        ind_from_inf,
+                        ind_names_from_gt,
+                        indices_metric_names,
+                    )
+
+                # -----------------------------
+                # Plots
+                # -----------------------------
+                if scene_count < scenes_to_plot:
+                    base_dir = plots_dir / tile_type / target_type
+                    base_dir.mkdir(parents=True, exist_ok=True)
+
+                    # extra diagnostics for indices when target is bands
+                    if target_type == "bands":
+                        idx_dir = plots_dir / tile_type / "indices"
+                        idx_dir.mkdir(parents=True, exist_ok=True)
+
+                        plot_histo_2d(
+                            idx_dir / "histos2d",
+                            ind_from_gt,
+                            ind_names_from_gt,
+                            dname,
+                            prefix="computed_from_gt",
+                        )
+                        plot_histo_2d(
+                            idx_dir / "histos2d",
+                            ind_from_inf,
+                            ind_names_from_inf,
+                            dname,
+                            prefix="computed_from_inf",
+                        )
+                        plot_comparison_histos_2d(
+                            idx_dir / "histos2d_comparison",
+                            ind_from_gt,
+                            ind_from_inf,
+                            ind_names_from_gt,
+                            dname,
+                            prefix="computed_from_gt_inf",
+                        )
+                        plot_scatter_gt_vs_inf(
+                            idx_dir / "scatter_gt_vs_inf",
+                            ind_from_gt,
+                            ind_from_inf,
+                            ind_names_from_gt,
+                            dname,
+                            prefix="computed_from_gt_vs_inf",
+                        )
+                        plot_abs_error(
+                            idx_dir / "histos_abs_error",
+                            ind_from_gt,
+                            ind_from_inf,
+                            ind_names_from_gt,
+                            dname,
+                            prefix="computed_from_gt_vs_inf",
+                        )
+
+                    # target plots (bands or indices)
+                    plot_comparison_rgb_composites_2d(
+                        base_dir / "rgb_comparison",
+                        channels_gt,
+                        channels_inf,
+                        channel_names,
+                        dname,
+                        prefix="gt_inf",
+                    )
+                    plot_s2_composites_2d(
+                        base_dir / "composites",
+                        channels_gt,
+                        channel_names,
+                        dname,
+                        prefix="gt",
+                    )
+                    plot_s2_composites_2d(
+                        base_dir / "composites",
+                        channels_inf,
+                        channel_names,
+                        dname,
+                        prefix="inf",
                     )
                     plot_histo_2d(
-                        f"{job_plots_comp_ind_dir}/indices/histos2d",
-                        ind_from_inf,
-                        ind_names_from_inf,
+                        base_dir / "histos2d",
+                        channels_gt,
+                        channel_names,
                         dname,
-                        prefix="computed_from_inf",
+                        prefix="gt",
+                    )
+                    plot_histo_2d(
+                        base_dir / "histos2d",
+                        channels_inf,
+                        channel_names,
+                        dname,
+                        prefix="inf",
                     )
                     plot_comparison_histos_2d(
-                        f"{job_plots_comp_ind_dir}/indices/histos2d_comparison",
-                        ind_from_gt,
-                        ind_from_inf,
-                        ind_names_from_gt,
+                        base_dir / "histos2d_comparison",
+                        channels_gt,
+                        channels_inf,
+                        channel_names,
                         dname,
-                        prefix="computed_from_gt_inf",
+                        prefix="gt_inf",
                     )
                     plot_scatter_gt_vs_inf(
-                        f"{job_plots_comp_ind_dir}/indices/scatter_gt_vs_inf",
-                        ind_from_gt,
-                        ind_from_inf,
-                        ind_names_from_gt,
+                        base_dir / "scatter_gt_vs_inf",
+                        channels_gt,
+                        channels_inf,
+                        channel_names,
                         dname,
-                        prefix="computed_from_gt_vs_inf",
+                        prefix="gt_vs_inf",
                     )
                     plot_abs_error(
-                        f"{job_plots_comp_ind_dir}/indices/histos_abs_error",
-                        ind_from_gt,
-                        ind_from_inf,
-                        ind_names_from_gt,
+                        base_dir / "abs_error",
+                        channels_gt,
+                        channels_inf,
+                        channel_names,
                         dname,
-                        prefix="computed_from_gt_vs_inf",
+                        prefix="gt_vs_inf",
                     )
 
-                # Bands / RGB composites + histograms (always)
-                plot_comparison_rgb_composites_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d_comparison",
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="gt_inf",
-                )
+                    scene_count += 1
 
-                plot_s2_composites_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d",
-                    channels_gt,
-                    channel_names,
-                    dname,
-                    prefix="gt",
-                )
-                plot_s2_composites_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d",
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="inf",
-                )
+            except Exception as e:
+                print(f"[ERROR] Error for the scene {dname}: {e}")
 
-                plot_histo_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d",
-                    channels_gt,
-                    channel_names,
-                    dname,
-                    prefix="gt",
-                )
-                plot_histo_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d",
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="inf",
-                )
-
-                plot_comparison_rgb_composites_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d_comparison",
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="gt_inf",
-                )
-                plot_comparison_histos_2d(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos2d_comparison",
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="gt_inf",
-                )
-
-                plot_scatter_gt_vs_inf(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/scatter_gt_vs_inf",
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="gt_vs_inf",
-                )
-
-                plot_abs_error(
-                    job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/histos_abs_error",
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    dname,
-                    prefix="gt_vs_inf",
-                )
-
-                scene_count += 1
-
-        except Exception as e:  # broad catch so one bad scene doesn't kill everything
-            print(f"[ERROR] Error for the scene {dname}: {e}")
-
-    # ------------------------------------------------------------------
-    # Close files
-    # ------------------------------------------------------------------
-    gt_vs_inf_file.close()
     if gt_vs_comp_file is not None:
         gt_vs_comp_file.close()
 
-    # ------------------------------------------------------------------
-    # Aggregate CSVs → DataFrames, then produce summary tables + plots
-    # ------------------------------------------------------------------
-    if target_type == "bands" and table1_path is not None:
-        print(table1_path)
-        gt_vs_comp_df = pd.read_csv(table1_path)
-        print(gt_vs_comp_df)
-
+    # -----------------------------
+    # Aggregate CSV → outputs + histograms
+    # -----------------------------
+    if target_type == "bands" and gt_vs_comp_path is not None and gt_vs_comp_path.exists():
+        gt_vs_comp_df = pd.read_csv(gt_vs_comp_path)
         if not gt_vs_comp_df.empty:
             produce_outputs_from_df(gt_vs_comp_df, config, indices_metric_names, prefix1)
             plot_group_metric_histograms(
-                output_dir=Path(job_plots_dir / f"{tile_type}/{sample_type}/indices/metrics"),
+                output_dir=plots_dir / tile_type / "indices" / "metrics",
                 df=gt_vs_comp_df,
                 group_col="indices",
                 metrics=indices_metric_names,
                 prefix="gt_vs_comp",
             )
         else:
-            print(f"[WARN] Indices metrics table {table1_path} is empty; skipping summary plots.")
+            print(f"[WARN] Indices metrics table {gt_vs_comp_path} is empty; skipping summary plots.")
 
-    print(table2_path)
-    gt_vs_inf_df = pd.read_csv(table2_path)
-    print(gt_vs_inf_df)
-
-    if not gt_vs_inf_df.empty:
-        produce_outputs_from_df(gt_vs_inf_df, config, metric_names, prefix2)
-        plot_group_metric_histograms(
-            output_dir=Path(job_plots_dir / f"{tile_type}/{sample_type}/{target_type}/metrics"),
-            df=gt_vs_inf_df,
-            group_col=target_type,
-            metrics=metric_names,
-            prefix="gt_vs_inf",
-        )
-    else:
-        print(f"[WARN] GT vs INF metrics table {table2_path} is empty; skipping summary plots.")
+    if gt_vs_inf_path.exists():
+        gt_vs_inf_df = pd.read_csv(gt_vs_inf_path)
+        if not gt_vs_inf_df.empty:
+            produce_outputs_from_df(gt_vs_inf_df, config, metric_names, prefix2)
+            plot_group_metric_histograms(
+                output_dir=plots_dir / tile_type / target_type / "metrics",
+                df=gt_vs_inf_df,
+                group_col=target_type,
+                metrics=metric_names,
+                prefix="gt_vs_inf",
+            )
+        else:
+            print(f"[WARN] GT vs INF metrics table {gt_vs_inf_path} is empty; skipping summary plots.")
 

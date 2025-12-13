@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 
-from .sam_loss import sam_loss
+from .sam_loss import SAMLoss
 from .VGGPerceptualLoss import VGGPerceptualLoss
 
 
@@ -39,7 +39,7 @@ class CombinedLoss(nn.Module):
 
         # --- Base losses ---
         self.l1 = nn.L1Loss(reduction=reduction)
-        self.sam = sam_loss
+        self.sam = SAMLoss
         self.vgg = VGGPerceptualLoss()
 
         # --- Default RGB mapping if not provided ---
