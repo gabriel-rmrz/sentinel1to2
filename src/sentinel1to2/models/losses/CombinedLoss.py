@@ -39,7 +39,7 @@ class CombinedLoss(nn.Module):
 
         # --- Base losses ---
         self.l1 = nn.L1Loss(reduction=reduction)
-        self.sam = SAMLoss
+        self.sam = SAMLoss()
         self.vgg = VGGPerceptualLoss()
 
         # --- Default RGB mapping if not provided ---

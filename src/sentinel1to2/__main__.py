@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 import torch
-import yaml
+from torch.utils.data import DataLoader
 
 from .prepare_input_data import prepare_input_data
 from .train_model import train_model
@@ -14,12 +14,12 @@ from .performance import performance
 from .tools.get_steps import get_steps
 from .tools.get_model import get_model
 from .tools.parse_args import parse_args
+from .tools.scene_split_dataset import scene_split_dataset
 
 from .models.patchgan import PatchGANDiscriminator
 
-# NEW: split-config + run/dataset path resolving
 from .tools.config_utils import load_yaml, deep_merge, resolve_paths, save_yaml
-from .tools.loss_factory import get_loss  # (recommended) move loss factory out of __main__
+from .tools.loss_factory import get_loss
 
 
 def _ensure_dirs(config: dict) -> None:
@@ -42,18 +42,17 @@ def _ensure_dirs(config: dict) -> None:
 
 
 def _load_and_resolve_config(args) -> dict:
-    """Load config from legacy -c or split dataset/experiment configs, then resolve paths."""
-    if getattr(args, "config", None) is not None and args.config is not None:
-        config = load_yaml(Path(args.config))
-    else:
-        ds_cfg = getattr(args, "dataset_config", None)
-        ex_cfg = getattr(args, "experiment_config", None)
-        if ds_cfg is None or ex_cfg is None:
-            raise ValueError(
-                "Provide either -c CONFIG.yaml (legacy) OR both --dataset-config and --experiment-config."
-            )
-        config = deep_merge(load_yaml(Path(ds_cfg)), load_yaml(Path(ex_cfg)))
+    """
+    Refactored-only mode:
+      requires --dataset-config and --experiment-config
+    """
+    ds_cfg = getattr(args, "dataset_config", None)
+    ex_cfg = getattr(args, "experiment_config", None)
 
+    if ds_cfg is None or ex_cfg is None:
+        raise ValueError("Refactored mode requires --dataset-config and --experiment-config.")
+
+    config = deep_merge(load_yaml(Path(ds_cfg)), load_yaml(Path(ex_cfg)))
     config = resolve_paths(config)
     _ensure_dirs(config)
 
@@ -83,7 +82,8 @@ def _build_gan_components(config: dict, device: torch.device):
         return None, None
 
     in_ch = int(config["model"]["parameters"]["in_channels"])
-    target_type = config["target"]["type"]
+    target_type = str(config["target"]["type"]).lower()
+
     if target_type == "bands":
         out_ch = len(config["target"]["selected_bands"])
     elif target_type == "indices":
@@ -96,6 +96,47 @@ def _build_gan_components(config: dict, device: torch.device):
     lr = float(config["training"]["optimizer"]["parameters"]["lr"])
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
     return discriminator, optimizer_D
+
+
+def _build_train_val_loaders(config: dict, device: torch.device) -> tuple[DataLoader, DataLoader]:
+    """
+    Build train/val DataLoaders from dataset cache HDF5 files.
+    """
+    dataset_cache_dir = Path(config["paths"]["dataset_cache_dir"])
+    train_h5 = dataset_cache_dir / "h5" / config["training"]["data"]["train_dataset"]
+    val_h5 = dataset_cache_dir / "h5" / config["training"]["data"]["val_dataset"]
+
+    if not train_h5.is_file():
+        raise FileNotFoundError(f"Training dataset not found: {train_h5}")
+    if not val_h5.is_file():
+        raise FileNotFoundError(f"Validation dataset not found: {val_h5}")
+
+    train_ds = scene_split_dataset(train_h5)
+    val_ds = scene_split_dataset(val_h5)
+
+    bs = int(config["training"]["data"]["batch_size"])
+    nw = int(config["training"]["data"]["n_workers"])
+    pin = (device.type == "cuda")
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=bs,
+        shuffle=True,
+        num_workers=nw,
+        pin_memory=pin,
+        persistent_workers=(nw > 0),
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=bs,
+        shuffle=False,
+        num_workers=nw,
+        pin_memory=pin,
+        persistent_workers=(nw > 0),
+    )
+
+    return train_loader, val_loader
 
 
 def main() -> None:
@@ -124,12 +165,12 @@ def main() -> None:
     # -------------------------
     if "preprocessing" in steps:
         logging.info(f"Step {steps['preprocessing']}: preprocessing")
-        prepare_input_data(config)  # should write to dataset_cache_dir/*
+        prepare_input_data(config)
         if not args.all_steps:
             return
 
     # -------------------------
-    # 2) Build model + loss + optimizers
+    # 2) Model + loss + optimizers
     # -------------------------
     model = get_model(config).to(device)
     criterion = get_loss(config)
@@ -144,11 +185,20 @@ def main() -> None:
     logging.info(f"GAN mode: {gan_mode}")
 
     # -------------------------
-    # 3) Training (run outputs)
+    # 2.5) DataLoaders
+    # -------------------------
+    train_loader = None
+    val_loader = None
+    if ("training" in steps) or ("evaluation" in steps):
+        logging.info("Building DataLoaders from dataset cache")
+        train_loader, val_loader = _build_train_val_loaders(config, device)
+
+    # -------------------------
+    # 3) Training
     # -------------------------
     if "training" in steps:
         logging.info(f"Step {steps['training']}: training")
-        train_losses, val_losses = train_model(
+        train_model(
             model=model,
             device=device,
             config=config,
@@ -164,7 +214,7 @@ def main() -> None:
         logging.info("Training step finished")
 
     # -------------------------
-    # 4) Inference (run outputs)
+    # 4) Inference
     # -------------------------
     if "inference" in steps:
         logging.info(f"Step {steps['inference']}: inference")
@@ -173,15 +223,16 @@ def main() -> None:
         logging.info("Inference step finished")
 
     # -------------------------
-    # 5) Evaluation (run outputs)
+    # 5) Evaluation
     # -------------------------
     if "evaluation" in steps:
         logging.info(f"Step {steps['evaluation']}: evaluation")
-        evaluate_model(model, config, device)
+        num_samples = int(config.get("evaluation", {}).get("num_samples", 5))
+        evaluate_model(model, config, device, val_loader, num_samples=num_samples)
         logging.info("Evaluation finished")
 
     # -------------------------
-    # 6) Performance (run outputs)
+    # 6) Performance
     # -------------------------
     if "performance" in steps:
         logging.info(f"Step {steps['performance']}: performance")

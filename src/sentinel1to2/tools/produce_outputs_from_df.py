@@ -1,112 +1,189 @@
-import pandas as pd
+from __future__ import annotations
+
+import logging
 from pathlib import Path
-import matplotlib.pyplot as plt
+from typing import Iterable, Optional
 
-    
-def produce_outputs_from_df(df, config, metric_names, prefix):
-  print(df.keys())
-  if "indices" in df.keys():
-    hist_vars = df["indices"].unique()
-    var_type = "indices"
-  elif "bands" in df.keys():
-    hist_vars = df["bands"].unique()
-    var_type = "bands"
+import pandas as pd
 
-  means_df = pd.DataFrame(columns=["hist_vars","metric","mean", "std"])
-  for mn in metric_names:
-    for hv in hist_vars:
-      '''
-      fig, ax = plt.subplots()
-      df[df[var_type] ==hv].hist(mn, ax=ax)
-      fig.savefig(f"plots/metrics/histos/{prefix}_{hv}_{mn}.png")
-      plt.close(fig)
-      '''
-      means_df.loc[-1] = [mn, hv , df[df[var_type] ==hv][mn].mean(), df[df[var_type] ==hv][mn].std()]
-      means_df.index = means_df.index + 1
-      means_df = means_df.sort_index()
-  means_df.to_csv(f"tables/{prefix}_means.csv", index=False)
-  save_df_to_latex(means_df, config, metric_names, prefix)
 
-def save_df_to_latex(df, config, metric_names, prefix):
-    job_dir = Path(config['job']['dir'])
-    # df columns: hist_vars | metric | mean | std
-    wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
-    wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
+def _get_run_metrics_dir(config: dict) -> Path:
+    run_dir = Path(config["paths"]["run_dir"])
+    out_dir = run_dir / "metrics"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
 
-    order = metric_names 
-    cols = pd.MultiIndex.from_product([order, ["mean", "std"]])
-    wide = wide.reindex(columns=cols)
 
-    # Combine mean ± std into single cells (use the full string key, not col[0]!)
-    combined = pd.DataFrame(
-        {
-            hv: wide[(hv, "mean")].map(lambda m: f"{m:.3f}") +
-                " ± " +
-                wide[(hv, "std")].map(lambda s: f"{s:.3f}")
-            for hv in order
-        },
-        index=wide.index
+def _detect_group_col(df: pd.DataFrame, config: dict) -> str:
+    """
+    Decide which column groups the metrics:
+      - prefers explicit columns in df: 'bands' or 'indices'
+      - otherwise falls back to config['target']['type'] if present in df
+    """
+    cols = set(df.columns)
+
+    if "indices" in cols:
+        return "indices"
+    if "bands" in cols:
+        return "bands"
+
+    # fallback: sometimes the group column is literally the target_type
+    target_type = str(config.get("target", {}).get("type", "")).lower()
+    if target_type and target_type in cols:
+        return target_type
+
+    raise ValueError(
+        "Could not detect group column. Expected one of: 'bands', 'indices', or config['target']['type'] present in df."
     )
 
-    combined.index.name = ""
 
-    # Vertical bars: one per column + outer borders
+def summarize_metrics_by_group(
+    df: pd.DataFrame,
+    group_col: str,
+    metric_names: Iterable[str],
+) -> pd.DataFrame:
+    """
+    Returns a tidy DF with columns:
+      group | metric | mean | std
+    """
+    metric_names = list(metric_names)
+
+    missing = [m for m in metric_names if m not in df.columns]
+    if missing:
+        raise ValueError(f"Missing metric columns in df: {missing}")
+
+    if group_col not in df.columns:
+        raise ValueError(f"Group column '{group_col}' not found in df columns: {list(df.columns)}")
+
+    rows = []
+    for metric in metric_names:
+        for group_value, sub in df.groupby(group_col):
+            rows.append(
+                {
+                    "group": group_value,
+                    "metric": metric,
+                    "mean": float(sub[metric].mean()),
+                    "std": float(sub[metric].std(ddof=1)) if len(sub) > 1 else 0.0,
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def _format_mean_std_table(
+    summary_df: pd.DataFrame,
+    metric_names: list[str],
+) -> pd.DataFrame:
+    """
+    Convert tidy summary into a wide table where each cell is "mean ± std".
+    Index: metric
+    Columns: group values
+    """
+    if summary_df.empty:
+        return pd.DataFrame()
+
+    # pivot mean and std separately
+    wide_mean = summary_df.pivot(index="metric", columns="group", values="mean")
+    wide_std = summary_df.pivot(index="metric", columns="group", values="std")
+
+    # enforce metric row order
+    wide_mean = wide_mean.reindex(metric_names)
+    wide_std = wide_std.reindex(metric_names)
+
+    # "mean ± std"
+    combined = pd.DataFrame(index=wide_mean.index)
+    for col in wide_mean.columns:
+        combined[col] = wide_mean[col].map(lambda x: f"{x:.3f}") + " ± " + wide_std[col].map(lambda x: f"{x:.3f}")
+
+    combined.index.name = ""
+    return combined
+
+
+def save_summary_csv(summary_df: pd.DataFrame, out_csv: Path) -> None:
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    summary_df.to_csv(out_csv, index=False)
+
+
+def save_summary_latex(
+    summary_df: pd.DataFrame,
+    metric_names: list[str],
+    out_tex: Path,
+    caption: str = "Results summary",
+    label: str = "tab:results",
+) -> None:
+    """
+    Writes a LaTeX table where entries are "mean ± std".
+    """
+    combined = _format_mean_std_table(summary_df, metric_names)
+    out_tex.parent.mkdir(parents=True, exist_ok=True)
+
+    if combined.empty:
+        out_tex.write_text("% Empty summary table\n")
+        return
+
+    # nice vertical borders
     column_format = "|l|" + "|".join(["c"] * len(combined.columns)) + "|"
 
     latex = combined.to_latex(
         index=True,
-        multicolumn=True,
-        multicolumn_format="c",
         escape=False,  # keep ±
         column_format=column_format,
-        caption="Results summary",
-        label="tab:results",
+        caption=caption,
+        label=label,
     )
 
-    # Draw lines if booktabs inserted them
-    latex = (latex.replace(r"\toprule", r"\hline")
-                  .replace(r"\midrule", r"\hline")
-                  .replace(r"\bottomrule", r"\hline"))
+    # replace booktabs rules with \hline for the vertical bars to show
+    latex = (
+        latex.replace(r"\toprule", r"\hline")
+        .replace(r"\midrule", r"\hline")
+        .replace(r"\bottomrule", r"\hline")
+    )
 
-    Path(job_dir / f"outputs/tables/{prefix}_means.tex").write_text(latex)
+    out_tex.write_text(latex)
 
-'''
-def save_df_to_latex(df, prefix):
-  # Assuming df has columns: hist_vars | metric | mean | std
-  wide = df.pivot(index="metric", columns="hist_vars", values=["mean", "std"])
-  wide = wide.swaplevel(0, 1, axis=1).sort_index(axis=1, level=0)
 
-  order = ["mae", "psnr", "ssim", "r2"]
-  cols = pd.MultiIndex.from_product([order, ["mean", "std"]])
-  wide = wide.reindex(columns=cols)
+def produce_outputs_from_df(
+    df: pd.DataFrame,
+    config: dict,
+    metric_names: list[str],
+    prefix: str,
+    group_col: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Main entry point used by evaluate/performance scripts.
 
-  # Optional: hide index name
-  wide.index.name = ""
+    Writes:
+      - run_dir/metrics/{prefix}_means.csv
+      - run_dir/metrics/{prefix}_means.tex
 
-  # --- Here’s where the vertical lines magic happens ---
-  column_format = "|l|rr|rr|rr|rr|"
+    Returns
+    -------
+    summary_df : pd.DataFrame
+        Tidy summary table with columns: group | metric | mean | std
+    """
+    logging.getLogger(__name__).info(f"Producing summary outputs for prefix='{prefix}'")
 
-  latex = wide.to_latex(
-      index=True,
-      multicolumn=True,
-      multicolumn_format="c",
-      float_format=lambda x: f"{x:.3f}",
-      column_format=column_format,
-      caption="Results summary",
-      label="tab:results",
-  )
-  # assume `latex` is the string from wide.to_latex(...)
-  # 1) vertical bars around each 2-col group in the header
-  latex = latex.replace(r"\multicolumn{2}{c}{", r"\multicolumn{2}{|c|}{")
+    if df is None or df.empty:
+        logging.getLogger(__name__).warning("Input dataframe is empty; skipping outputs.")
+        return pd.DataFrame(columns=["group", "metric", "mean", "std"])
 
-  # 2) use a tabular preamble with bars between groups
-  latex = latex.replace(r"\begin{tabular}{l", r"\begin{tabular}{|l|rr|rr|rr|rr|}")
+    if group_col is None:
+        group_col = _detect_group_col(df, config)
 
-  # 3) if you used booktabs, swap to \hline so bars are drawn
-  latex = (latex.replace(r"\toprule", r"\hline")
-              .replace(r"\midrule", r"\hline")
-              .replace(r"\bottomrule", r"\hline"))
+    out_dir = _get_run_metrics_dir(config)
+    out_csv = out_dir / f"{prefix}_means.csv"
+    out_tex = out_dir / f"{prefix}_means.tex"
 
-  Path(f"tables/{prefix}_means.tex").write_text(latex)
+    summary_df = summarize_metrics_by_group(df, group_col=group_col, metric_names=metric_names)
 
-'''
+    save_summary_csv(summary_df, out_csv)
+    save_summary_latex(
+        summary_df,
+        metric_names=metric_names,
+        out_tex=out_tex,
+        caption=f"Results summary ({prefix})",
+        label=f"tab:{prefix}",
+    )
+
+    return summary_df
+
