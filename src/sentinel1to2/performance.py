@@ -11,7 +11,13 @@ from tqdm import tqdm
 from .tools.produce_outputs_from_df import produce_outputs_from_df
 from .tools.compute_vegetation_indices import compute_vegetation_indices
 from .tools.load_image import load_image
-from .tools.compute_metrics import compute_all_metrics
+
+from .tools.compute_metrics import (
+    write_metrics_header,
+    write_per_channel_metrics,
+    write_sam_header,
+    write_scene_sam,
+)
 
 from .plotting.plot_comparison_rgb_composites_2d import plot_comparison_rgb_composites_2d
 from .plotting.plot_comparison_histos_2d import plot_comparison_histos_2d
@@ -21,9 +27,10 @@ from .plotting.plot_abs_error import plot_abs_error
 from .plotting.plot_histo_2d import plot_histo_2d
 from .plotting.plot_group_metric_histograms import plot_group_metric_histograms
 
+from .plotting.plot_sam_metrics import plot_sam_histogram, plot_sam_per_scene
+
 
 def read_csv_to_list(path: Path) -> List[str]:
-    """Read a one-column CSV and return the first column as a list of strings."""
     rows: List[str] = []
     if not path.exists():
         raise FileNotFoundError(f"Scene list CSV not found: {path}")
@@ -38,44 +45,24 @@ def read_csv_to_list(path: Path) -> List[str]:
 
 
 def _get_dirs(config: dict, sample_type: str):
-    """
-    Returns:
-      real_dir: directory holding GT scenes
-      pred_dir: directory holding predicted GeoTIFFs
-      scene_list_path: CSV of scenes inferred
-      tables_dir: output tables
-      plots_dir: output plots (scene-level)
-    """
     if "paths" not in config or "run_dir" not in config["paths"]:
         raise KeyError("config['paths']['run_dir'] not found. Resolve paths in __main__.py first.")
 
     run_dir = Path(config["paths"]["run_dir"])
 
-    # GT directory depends on split
     if sample_type == "val":
         real_dir = Path(config["preprocessing"]["input_dir"])
     else:
         real_dir = Path(config["inference"]["input_dir"])
 
-    # Predictions live under run_dir
-    # Default to run_dir/inference/<sample_type>/
-    pred_subdir = config.get("inference", {}).get("output_subdir", f"inference/{sample_type}")
-    # if user sets output_subdir to "inference/test", but we are evaluating "val",
-    # we don't want to mix. Prefer explicit per split:
-    # - if output_subdir already contains "val" or "test" we respect it,
-    # - otherwise we append sample_type.
-    pred_dir = run_dir / pred_subdir
-    if pred_dir.name not in ("val", "test") and sample_type in ("val", "test"):
-        # if output_subdir is generic like "inference", use inference/<sample_type>
-        # but don't break if the user already set a split-specific subdir
-        if pred_subdir.endswith("inference") or pred_subdir.endswith("inference/"):
-            pred_dir = run_dir / "inference" / sample_type
+    # predictions live under run_dir/inference/<sample_type>/
+    pred_dir = run_dir / "inference" / sample_type
 
-    # Scene list written by batch_run_inference
     scene_list_path = run_dir / "inference" / "lists" / f"{sample_type}_scenes_inferred_list.csv"
 
     tables_dir = run_dir / "metrics" / "tables"
-    plots_dir = run_dir / "plots" / "scenes" / sample_type  # scene-level plots
+    plots_dir = run_dir / "plots" / "scenes" / sample_type
+
     tables_dir.mkdir(parents=True, exist_ok=True)
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -85,72 +72,63 @@ def _get_dirs(config: dict, sample_type: str):
 def _get_channel_names(config: dict, target_type: str) -> List[str]:
     if target_type == "indices":
         return list(config["target"]["selected_indices"])
-
-    # bands
     all_bands = config["target"]["all_bands"]
     selected_bands = config["target"]["selected_bands"]
     return [all_bands[j] for j in selected_bands]
 
 
 def performance(config: dict, sample_type: str = "test") -> None:
-    """
-    Evaluate model performance on full scenes (GeoTIFFs).
-
-    Reads:
-      - GT scenes from preprocessing.input_dir (val) or inference.input_dir (test)
-      - Pred scenes from run_dir/inference/<sample_type>/
-      - Scene list from run_dir/inference/lists/<sample_type>_scenes_inferred_list.csv
-
-    Writes:
-      - tables to run_dir/metrics/tables/
-      - plots to run_dir/plots/scenes/<sample_type>/
-    """
     run_dir, real_dir, pred_dir, scene_list_path, tables_dir, plots_dir = _get_dirs(config, sample_type)
 
     target_type = config["target"]["type"]  # "bands" or "indices"
     tile_type = "scenes"
 
-    # metric names depend on target type
-    metric_names = config["performance"][f"{target_type}_metric_names"]
+    # metrics requested
+    metric_names = list(config["performance"][f"{target_type}_metric_names"])
+    sam_enabled = (target_type == "bands") and ("sam" in [m.lower() for m in metric_names])
+    per_channel_metric_names = [m for m in metric_names if str(m).lower() != "sam"]
 
-    # channel names for outputs
     channel_names = _get_channel_names(config, target_type)
 
-    # For indices evaluation (when target_type == indices), we may need to derive GT indices from GT S2 bands.
     selected_bands = config["target"].get("selected_bands", [])
     selected_indices = config["target"].get("selected_indices", [])
 
-    # List of scenes to evaluate
     list_of_scenes = read_csv_to_list(scene_list_path)
 
-    # Output CSVs
-    indices_metric_names = None
+    # Optional indices-from-bands comparison
+    gt_vs_comp_file = None
     gt_vs_comp_path = None
     prefix1 = None
+    indices_metric_names = None
 
     if target_type == "bands":
-        indices_metric_names = config["performance"]["indices_metric_names"]
+        indices_metric_names = list(config["performance"]["indices_metric_names"])
         prefix1 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_comp"
         gt_vs_comp_path = tables_dir / f"{prefix1}.csv"
 
     prefix2 = f"{sample_type}_{tile_type}_{target_type}_gt_vs_inf"
     gt_vs_inf_path = tables_dir / f"{prefix2}.csv"
 
+    sam_path = tables_dir / f"{prefix2}__sam.csv" if sam_enabled else None
+
     scenes_to_plot = int(config.get("evaluation", {}).get("scenes_to_plot", 0))
     scene_count = 0
 
-    # Open CSV writers
-    gt_vs_comp_file = None
+    # open optional comp file
     if target_type == "bands":
         gt_vs_comp_file = open(gt_vs_comp_path, "w")
-        gt_vs_comp_file.write(",".join(["scene", "indices", *indices_metric_names]) + "\n")
+        write_metrics_header(gt_vs_comp_file, "indices", indices_metric_names)
+
+    # open optional SAM file
+    sam_file = None
+    if sam_enabled and sam_path is not None:
+        sam_file = open(sam_path, "w")
+        write_sam_header(sam_file)
 
     with open(gt_vs_inf_path, "w") as gt_vs_inf_file:
-        gt_vs_inf_file.write(",".join(["scene", target_type, *metric_names]) + "\n")
+        write_metrics_header(gt_vs_inf_file, target_type, per_channel_metric_names)
 
-        # Loop scenes
         for dname in tqdm(list_of_scenes, desc=f"Performance on {sample_type} sample"):
-            # Scene folder expected: "{scene}_{day}" (your convention)
             try:
                 scene, day = dname.split("_", 1)
             except ValueError:
@@ -158,8 +136,6 @@ def performance(config: dict, sample_type: str = "test") -> None:
                 continue
 
             gt_path = real_dir / dname / f"{day}_s2.tif"
-
-            # New inference naming: {sample_type}__{scene_folder}__pred.tif
             pred_path = pred_dir / f"{sample_type}__{dname}__pred.tif"
 
             missing = [str(p) for p in (gt_path, pred_path) if not p.is_file()]
@@ -168,79 +144,63 @@ def performance(config: dict, sample_type: str = "test") -> None:
                 continue
 
             try:
-                # -----------------------------
+                # -------------------------
                 # Load GT / INF
-                # -----------------------------
+                # -------------------------
                 if target_type == "bands":
-                    # GT bands selected (scaled to [0, 1])
                     channels_gt = load_image(str(gt_path), selected_bands) / 10000.0
                 else:
-                    # target_type == "indices":
-                    # derive GT indices from GT S2 bands
                     s2_gt = load_image(str(gt_path), selected_bands) / 10000.0
                     ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, s2_gt)
-
-                    # select only indices in config["target"]["selected_indices"]
                     sel_idx = [ind_names_from_gt.index(ind) for ind in selected_indices]
                     channels_gt = np.array([ind_from_gt[i] for i in sel_idx])
 
-                # INF predicted target (already in expected scale)
                 channels_inf = load_image(str(pred_path))
 
-                # -----------------------------
-                # Metrics on target (bands or indices)
-                # -----------------------------
-                compute_all_metrics(
+                # -------------------------
+                # Per-channel metrics (no SAM)
+                # -------------------------
+                write_per_channel_metrics(
                     gt_vs_inf_file,
-                    dname,
-                    channels_gt,
-                    channels_inf,
-                    channel_names,
-                    metric_names,
+                    scene_name=dname,
+                    gt=channels_gt,
+                    pred=channels_inf,
+                    channel_names=channel_names,
+                    metric_names=per_channel_metric_names,
                 )
 
-                # -----------------------------
-                # Optional: indices computed from bands
-                # -----------------------------
+                # -------------------------
+                # Scene-level SAM (bands only)
+                # -------------------------
+                if sam_enabled and sam_file is not None:
+                    write_scene_sam(sam_file, scene_name=dname, gt=channels_gt, pred=channels_inf)
+
+                # -------------------------
+                # Optional: indices from bands
+                # -------------------------
                 if target_type == "bands" and gt_vs_comp_file is not None:
                     ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, channels_gt)
                     ind_from_inf, ind_names_from_inf = compute_vegetation_indices(config, channels_inf)
-
-                    compute_all_metrics(
+                    write_per_channel_metrics(
                         gt_vs_comp_file,
-                        dname,
-                        ind_from_gt,
-                        ind_from_inf,
-                        ind_names_from_gt,
-                        indices_metric_names,
+                        scene_name=dname,
+                        gt=ind_from_gt,
+                        pred=ind_from_inf,
+                        channel_names=ind_names_from_gt,
+                        metric_names=indices_metric_names,
                     )
 
-                # -----------------------------
+                # -------------------------
                 # Plots
-                # -----------------------------
+                # -------------------------
                 if scene_count < scenes_to_plot:
                     base_dir = plots_dir / tile_type / target_type
                     base_dir.mkdir(parents=True, exist_ok=True)
 
-                    # extra diagnostics for indices when target is bands
                     if target_type == "bands":
                         idx_dir = plots_dir / tile_type / "indices"
                         idx_dir.mkdir(parents=True, exist_ok=True)
 
-                        plot_histo_2d(
-                            idx_dir / "histos2d",
-                            ind_from_gt,
-                            ind_names_from_gt,
-                            dname,
-                            prefix="computed_from_gt",
-                        )
-                        plot_histo_2d(
-                            idx_dir / "histos2d",
-                            ind_from_inf,
-                            ind_names_from_inf,
-                            dname,
-                            prefix="computed_from_inf",
-                        )
                         plot_comparison_histos_2d(
                             idx_dir / "histos2d_comparison",
                             ind_from_gt,
@@ -266,7 +226,6 @@ def performance(config: dict, sample_type: str = "test") -> None:
                             prefix="computed_from_gt_vs_inf",
                         )
 
-                    # target plots (bands or indices)
                     plot_comparison_rgb_composites_2d(
                         base_dir / "rgb_comparison",
                         channels_gt,
@@ -289,20 +248,8 @@ def performance(config: dict, sample_type: str = "test") -> None:
                         dname,
                         prefix="inf",
                     )
-                    plot_histo_2d(
-                        base_dir / "histos2d",
-                        channels_gt,
-                        channel_names,
-                        dname,
-                        prefix="gt",
-                    )
-                    plot_histo_2d(
-                        base_dir / "histos2d",
-                        channels_inf,
-                        channel_names,
-                        dname,
-                        prefix="inf",
-                    )
+                    plot_histo_2d(base_dir / "histos2d", channels_gt, channel_names, dname, prefix="gt")
+                    plot_histo_2d(base_dir / "histos2d", channels_inf, channel_names, dname, prefix="inf")
                     plot_comparison_histos_2d(
                         base_dir / "histos2d_comparison",
                         channels_gt,
@@ -335,10 +282,12 @@ def performance(config: dict, sample_type: str = "test") -> None:
 
     if gt_vs_comp_file is not None:
         gt_vs_comp_file.close()
+    if sam_file is not None:
+        sam_file.close()
 
-    # -----------------------------
-    # Aggregate CSV → outputs + histograms
-    # -----------------------------
+    # -------------------------
+    # Aggregate per-channel CSVs
+    # -------------------------
     if target_type == "bands" and gt_vs_comp_path is not None and gt_vs_comp_path.exists():
         gt_vs_comp_df = pd.read_csv(gt_vs_comp_path)
         if not gt_vs_comp_df.empty:
@@ -350,20 +299,24 @@ def performance(config: dict, sample_type: str = "test") -> None:
                 metrics=indices_metric_names,
                 prefix="gt_vs_comp",
             )
-        else:
-            print(f"[WARN] Indices metrics table {gt_vs_comp_path} is empty; skipping summary plots.")
 
     if gt_vs_inf_path.exists():
         gt_vs_inf_df = pd.read_csv(gt_vs_inf_path)
         if not gt_vs_inf_df.empty:
-            produce_outputs_from_df(gt_vs_inf_df, config, metric_names, prefix2)
+            produce_outputs_from_df(gt_vs_inf_df, config, per_channel_metric_names, prefix2)
             plot_group_metric_histograms(
                 output_dir=plots_dir / tile_type / target_type / "metrics",
                 df=gt_vs_inf_df,
                 group_col=target_type,
-                metrics=metric_names,
+                metrics=per_channel_metric_names,
                 prefix="gt_vs_inf",
             )
-        else:
-            print(f"[WARN] GT vs INF metrics table {gt_vs_inf_path} is empty; skipping summary plots.")
+
+    # -------------------------
+    # Plot SAM separately
+    # -------------------------
+    if sam_enabled and sam_path is not None and sam_path.exists():
+        sam_plot_dir = plots_dir / tile_type / "sam"
+        plot_sam_histogram(sam_path, sam_plot_dir, prefix=prefix2)
+        plot_sam_per_scene(sam_path, sam_plot_dir, prefix=prefix2)
 
