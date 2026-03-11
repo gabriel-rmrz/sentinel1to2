@@ -4,6 +4,11 @@ import rasterio
 def load_image(path, bands=None, scale=None):
     with rasterio.open(path) as src:
         img = src.read().astype(np.float32)
+        print('#############################')
+        print('#############################')
+        print(scale)
+        print('#############################')
+        print('#############################')
         if bands is not None:
             img = img[bands]
         if scale:

@@ -134,8 +134,13 @@ def process_scene(
         X = np.stack(input_patches, axis=0)   # (N, Cin, ps, ps)
         Y = np.stack(target_patches, axis=0)  # (N, Cout, ps, ps)
 
-        grp.create_dataset("inputs", data=X, dtype=np.float32, compression="gzip")
-        grp.create_dataset("targets", data=Y, dtype=np.float32, compression="gzip")
+        ps = crop_size
+        cin = X.shape[1]
+        cout = Y.shape[1]
+        #grp.create_dataset("inputs", data=X, dtype=np.float32, chunks=(1, cin, ps, ps), track_times=False)
+        #grp.create_dataset("targets", data=Y, dtype=np.float32, chunks=(1, cout, ps, ps), track_times=False)
+        grp.create_dataset("inputs", data=X, dtype=np.float32)
+        grp.create_dataset("targets", data=Y, dtype=np.float32)
 
         # metadata
         grp.attrs["target_type"] = target_type

@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.amp import autocast, GradScaler
 
 
 def _write_list_to_csv(path: Path, values: list[float]) -> None:
@@ -50,6 +51,8 @@ def train_model(
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
     logger = logging.getLogger(__name__)
 
+    use_amp = (device.type == "cuda") and bool(config.get("training", {}).get("amp", True))
+    scaler = GradScaler(enabled=use_amp)
     # -----------------------------
     # Output paths (run_dir)
     # -----------------------------
@@ -110,12 +113,15 @@ def train_model(
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
+
             if not use_gan:
                 optimizer_G.zero_grad(set_to_none=True)
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-                loss.backward()
-                optimizer_G.step()
+                with autocast(device_type=device.type, enabled=use_amp):
+                    outputs = model(inputs)
+                    loss = criterion(outputs, targets)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer_G)
+                scaler.update()
                 epoch_train_losses.append(float(loss.item()))
                 continue
 
@@ -140,8 +146,25 @@ def train_model(
             loss_D_fake = adv_criterion(pred_fake, fake_labels)
             loss_D = 0.5 * (loss_D_real + loss_D_fake)
 
-            loss_D.backward()
-            optimizer_D.step()
+            optimizer_D.zero_grad(set_to_none=True)
+            with torch.no_grad():
+                fake = model(inputs)
+            
+            real_pair = torch.cat([inputs, targets], dim=1)
+            fake_pair = torch.cat([inputs, fake], dim=1)
+            
+            with autocast(device_type=device.type, enabled=use_amp):
+                pred_real = discriminator(real_pair)
+                pred_fake = discriminator(fake_pair)
+                loss_D_real = adv_criterion(pred_real, torch.ones_like(pred_real))
+                loss_D_fake = adv_criterion(pred_fake, torch.zeros_like(pred_fake))
+                loss_D = 0.5 * (loss_D_real + loss_D_fake)
+            
+            scaler.scale(loss_D).backward()
+            scaler.step(optimizer_D)
+            scaler.update()
+
+
 
             # -------------------------
             # pix2pix: Train Generator
@@ -156,8 +179,20 @@ def train_model(
             recon_loss = criterion(fake, targets)
 
             loss_G = lambda_adv * adv_loss_G + lambda_recon * recon_loss
-            loss_G.backward()
-            optimizer_G.step()
+            optimizer_G.zero_grad(set_to_none=True)
+
+            with autocast(device_type=device.type, enabled=use_amp):
+                fake = model(inputs)
+                fake_pair = torch.cat([inputs, fake], dim=1)
+                pred_fake = discriminator(fake_pair)
+                adv_loss_G = adv_criterion(pred_fake, torch.ones_like(pred_fake))
+                recon_loss = criterion(fake, targets)
+                loss_G = lambda_adv * adv_loss_G + lambda_recon * recon_loss
+            
+            scaler.scale(loss_G).backward()
+            scaler.step(optimizer_G)
+            scaler.update()
+
 
             epoch_train_losses.append(float(loss_G.item()))
 

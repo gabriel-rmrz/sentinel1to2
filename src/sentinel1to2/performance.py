@@ -148,9 +148,9 @@ def performance(config: dict, sample_type: str = "test") -> None:
                 # Load GT / INF
                 # -------------------------
                 if target_type == "bands":
-                    channels_gt = load_image(str(gt_path), selected_bands) / 10000.0
+                    channels_gt = load_image(str(gt_path), selected_bands)/10000.0
                 else:
-                    s2_gt = load_image(str(gt_path), selected_bands) / 10000.0
+                    s2_gt = load_image(str(gt_path), selected_bands)/10000.0 
                     ind_from_gt, ind_names_from_gt = compute_vegetation_indices(config, s2_gt)
                     sel_idx = [ind_names_from_gt.index(ind) for ind in selected_indices]
                     channels_gt = np.array([ind_from_gt[i] for i in sel_idx])
@@ -201,6 +201,8 @@ def performance(config: dict, sample_type: str = "test") -> None:
                         idx_dir = plots_dir / tile_type / "indices"
                         idx_dir.mkdir(parents=True, exist_ok=True)
 
+                        plot_histo_2d(idx_dir / "histos2d", ind_from_gt, ind_names_from_gt, dname, prefix="computed_from_gt")
+                        plot_histo_2d(idx_dir / "histos2d", ind_from_inf, ind_names_from_gt, dname, prefix="computed_from_inf")
                         plot_comparison_histos_2d(
                             idx_dir / "histos2d_comparison",
                             ind_from_gt,

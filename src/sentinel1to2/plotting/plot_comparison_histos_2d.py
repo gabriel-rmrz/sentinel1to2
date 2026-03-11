@@ -70,8 +70,10 @@ def plot_comparison_histos_2d(output_dir: Path,
         name = raw_name.lower()
 
         # Stretch both like in single-plot version
-        img1 = stretch_2d(indices1[i])  # GT
-        img2 = stretch_2d(indices2[i])  # INF
+        #img1 = stretch_2d(indices1[i])  # GT
+        #img2 = stretch_2d(indices2[i])  # INF
+        img1 = indices1[i]  # GT
+        img2 = indices2[i]  # INF
         cmap = INDEX_CMAPS.get(name, "viridis")
 
         # Difference in original value space

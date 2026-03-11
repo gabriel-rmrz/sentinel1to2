@@ -97,19 +97,10 @@ def _build_gan_components(config: dict, device: torch.device):
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
     return discriminator, optimizer_D
 
-
 def _build_train_val_loaders(config: dict, device: torch.device) -> tuple[DataLoader, DataLoader]:
-    """
-    Build train/val DataLoaders from dataset cache HDF5 files.
-    """
     dataset_cache_dir = Path(config["paths"]["dataset_cache_dir"])
     train_h5 = dataset_cache_dir / "h5" / config["training"]["data"]["train_dataset"]
     val_h5 = dataset_cache_dir / "h5" / config["training"]["data"]["val_dataset"]
-
-    if not train_h5.is_file():
-        raise FileNotFoundError(f"Training dataset not found: {train_h5}")
-    if not val_h5.is_file():
-        raise FileNotFoundError(f"Validation dataset not found: {val_h5}")
 
     train_ds = scene_split_dataset(train_h5)
     val_ds = scene_split_dataset(val_h5)
@@ -118,13 +109,20 @@ def _build_train_val_loaders(config: dict, device: torch.device) -> tuple[DataLo
     nw = int(config["training"]["data"]["n_workers"])
     pin = (device.type == "cuda")
 
+    # More overlap between CPU loading and GPU compute
+    prefetch = int(config["training"]["data"].get("prefetch_factor", 4))
+    drop_last = bool(config["training"]["data"].get("drop_last", True))
+
     train_loader = DataLoader(
         train_ds,
         batch_size=bs,
         shuffle=True,
         num_workers=nw,
-        pin_memory=pin,
+        #pin_memory=pin,
+        pin_memory=False,
         persistent_workers=(nw > 0),
+        prefetch_factor=prefetch if nw > 0 else None,
+        drop_last=drop_last,
     )
 
     val_loader = DataLoader(
@@ -132,11 +130,15 @@ def _build_train_val_loaders(config: dict, device: torch.device) -> tuple[DataLo
         batch_size=bs,
         shuffle=False,
         num_workers=nw,
-        pin_memory=pin,
+        #pin_memory=pin,
+        pin_memory=False,
         persistent_workers=(nw > 0),
+        prefetch_factor=prefetch if nw > 0 else None,
+        drop_last=False,
     )
-
     return train_loader, val_loader
+
+
 
 
 def main() -> None:
@@ -218,7 +220,7 @@ def main() -> None:
     # -------------------------
     if "inference" in steps:
         logging.info(f"Step {steps['inference']}: inference")
-        batch_run_inference(config, device=device, sample_type="val")
+        #batch_run_inference(config, device=device, sample_type="val")
         batch_run_inference(config, device=device, sample_type="test")
         logging.info("Inference step finished")
 
@@ -236,7 +238,7 @@ def main() -> None:
     # -------------------------
     if "performance" in steps:
         logging.info(f"Step {steps['performance']}: performance")
-        performance(config, "val")
+        performance(config, "test")
         logging.info("Performance step finished")
 
 

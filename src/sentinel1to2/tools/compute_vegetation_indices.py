@@ -7,6 +7,24 @@ from typing import Dict, Any, List, Tuple, Callable
 def _safe_div(num: np.ndarray, den: np.ndarray, eps: float) -> np.ndarray:
     return num / (den + eps)
 
+def _sanitize(
+    x: np.ndarray,
+    *,
+    nan: float = 0.0,
+    posinf: float = 0.0,
+    neginf: float = 0.0,
+    max_abs: float | None = None,
+) -> np.ndarray:
+    """
+    Replace NaN / Inf and optionally clamp extreme magnitudes.
+    AMP-safe.
+    """
+    x = np.nan_to_num(x, nan=nan, posinf=posinf, neginf=neginf)
+    if max_abs is not None:
+        x = np.clip(x, -max_abs, max_abs)
+    return x
+
+
 
 def compute_vegetation_indices(
     config: Dict[str, Any],
@@ -170,18 +188,22 @@ def compute_vegetation_indices(
 
     for name in indices_to_compute:
         arr = INDEX_FUNCS[name]().astype(np.float32, copy=False)
-
+    
+        # --- NEW: sanitize NaN / Inf early ---
+        arr = _sanitize(arr, max_abs=50.0)
+    
         if clip:
-            # conservative clipping (you can tune these later)
+            # semantic / physical clipping
             if name in ("ndvi", "gndvi", "ndre", "ndwi", "arvi", "bsi", "ndsi", "savi"):
                 arr = np.clip(arr, -1.0, 1.0)
             elif name in ("evi",):
                 arr = np.clip(arr, -1.0, 2.0)
             elif name in ("msi", "reci", "cire", "mcari", "cig"):
                 arr = np.clip(arr, -10.0, 10.0)
-
+    
         out_list.append(arr)
         out_names.append(name)
+
 
     indices = np.stack(out_list, axis=0).astype(np.float32, copy=False)
     return indices, out_names

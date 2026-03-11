@@ -70,7 +70,8 @@ def plot_histo_2d(output_dir: Path,
 
     for i in range(C):
         name = names[i]
-        img = stretch_2d(indices[i])
+        #img = stretch_2d(indices[i])
+        img = indices[i]
 
         cmap = INDEX_CMAPS.get(name.lower(), "viridis")
 

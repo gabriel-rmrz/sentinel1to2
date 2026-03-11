@@ -8,8 +8,8 @@ def compute_diff(scene, day1, day2, real_dir, pred_dir):
   pred1 = os.path.join(pred_dir, f"{scene}_{day1}_pred.tif")
   pred2 = os.path.join(pred_dir, f"{scene}_{day2}_pred.tif")
 
-  r1 = load_image(real1, bands=[1,2,3,4,5,6,7,10,11], scale=10000)
-  r2 = load_image(real2, bands=[1,2,3,4,5,6,7,10,11], scale=10000)
+  r1 = load_image(real1, bands=[1,2,3,4,5,6,7,11,12], scale=10000)
+  r2 = load_image(real2, bands=[1,2,3,4,5,6,7,11,12], scale=10000)
   p1 = load_image(pred1)
   p2 = load_image(pred2)
 
