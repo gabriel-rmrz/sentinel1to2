@@ -47,7 +47,7 @@ inference:
 evaluation:
   scenes_to_plot: 2
 
-performance:
-  bands_metric_names: ["mae", "psnr", "ssim", "sam", "r2"]
-  indices_metric_names: ["mae", "psnr", "ssim", "r2"]
 
+performance:
+  bands_metric_names: ["mae", "psnr", "ssim", "sam", "ergas", "r2"]
+  indices_metric_names: ["mae", "psnr", "ssim", "sam", "ergas","r2"]

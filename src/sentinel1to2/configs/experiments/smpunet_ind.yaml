@@ -16,8 +16,8 @@ model:
 
 training:
   amp: false
-  n_epochs: 50
-  patience: 10
+  n_epochs: 5
+  patience: 4
 
   data:
     train_dataset: "train_dataset_S2.h5"

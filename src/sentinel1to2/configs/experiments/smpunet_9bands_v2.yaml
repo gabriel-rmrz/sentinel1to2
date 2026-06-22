@@ -16,8 +16,8 @@ model:
 
 training:
   amp: true
-  n_epochs: 50
-  patience: 10
+  n_epochs: 5
+  patience: 4
 
   data:
     train_dataset: "train_dataset_S2.h5"
@@ -39,7 +39,7 @@ training:
     name: "CombinedLoss"
     parameters:
       alpha: 1.0
-      beta: 1.0
+      beta: 2.0
       gamma: 0.1
       rgb_indices: [6, 2, 1]   # optional (B7, green, blue style indices as in your codebase)
   #loss:
