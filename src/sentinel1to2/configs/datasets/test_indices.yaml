@@ -1,0 +1,53 @@
+paths:
+  dataset_cache_root: "data/datasets"
+  runs_root: "runs"
+
+dataset:
+  name: "s1_to_ind"
+  version: 1
+
+run:
+  seed: 42
+
+
+preprocessing:
+  patch_dimension: [128, 128]
+  stride: 128        # training stride
+
+
+  # TRAIN input (used for preprocessing and val inference if needed)
+  input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/train/"
+  sample_size: 10
+
+  # Norm params: DO NOT recompute
+  do_norm_params: false
+  norm_params_file: "normalization_params.npz"
+  precalc_norm_params_path: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/normalization_params.npz"
+
+  # Cache policy for condor / reuse
+  cache_policy: "reuse"
+  split:
+    val_fraction: 0.2
+
+target:
+  type: "indices"
+  all_bands: ["b1","blue","green","red","b5","rededge","b7","nir","b8a","b9","b10","swir","b12"]
+  selected_bands: [1,2,3,4,5,6,7,10,11]   # 9 bands
+  selected_indices: ["bsi", "ndvi", "gndvi", "ndre", "ndsi", "ndwi", "savi"]
+
+inference:
+  # TEST input dir
+  input_dir: "/lustrehome/garamire/share/agri2intesa/s1_to_s2/test"
+  patch_dimension: [128, 128]
+  stride: 32         # inference stride
+  sample_size: 10 
+  batch_size:  128
+  use_gaussian: true
+
+evaluation:
+  scenes_to_plot: 2
+
+performance:
+  bands_metric_names: ["mae", "psnr", "ssim", "sam", "r2"]
+  indices_metric_names: ["mae", "psnr", "ssim", "r2"]
+

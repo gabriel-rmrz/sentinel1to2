@@ -1,0 +1,48 @@
+run:
+  seed: 42
+  name: "unet_indices_sar"   # auto-generated
+
+#model:
+#  name: "UNet"
+#  parameters:
+#    in_channels: 4
+#    classes: 9
+model:
+  name: "SMP_UNet"
+  parameters:
+    encoder_name: "efficientnet-b0"
+    encoder_weights: "imagenet"
+    in_channels: 2
+
+training:
+  amp: false
+  n_epochs: 50
+  patience: 10
+
+  data:
+    train_dataset: "train_dataset_S2.h5"
+    val_dataset: "val_dataset_S2.h5"
+    batch_size: 128
+    n_workers: 64 
+    prefetch_factor: 8
+    drop_last: True
+
+  optimizer:
+    name: "Adam"
+    parameters:
+      lr: 1e-4
+
+  gan:
+    mode: "none"
+
+  loss:
+    name: "IndexStructureLoss"
+    parameters:
+       alpha: 1.0
+       beta: 0.5
+       gamma: 0.3
+  #loss:
+  #  #name: "CombinedLoss"
+  #  name: "MAE"
+  #  parameters:
+  #    reduction: "mean"

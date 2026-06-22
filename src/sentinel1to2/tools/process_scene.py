@@ -111,6 +111,8 @@ def process_scene(
                 ],
                 axis=0,
             )
+            #x =  worldcover[:, top : top + crop_size, left : left + crop_size]
+            #x = s1[:, top : top + crop_size, left : left + crop_size]
 
             y = target_arr[:, top : top + crop_size, left : left + crop_size]
 

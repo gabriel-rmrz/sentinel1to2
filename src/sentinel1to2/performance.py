@@ -85,7 +85,8 @@ def performance(config: dict, sample_type: str = "test") -> None:
 
     # metrics requested
     metric_names = list(config["performance"][f"{target_type}_metric_names"])
-    sam_enabled = (target_type == "bands") and ("sam" in [m.lower() for m in metric_names])
+    #sam_enabled = (target_type == "bands") and ("sam" in [m.lower() for m in metric_names])
+    sam_enabled = "sam" in [m.lower() for m in metric_names]
     per_channel_metric_names = [m for m in metric_names if str(m).lower() != "sam"]
 
     channel_names = _get_channel_names(config, target_type)

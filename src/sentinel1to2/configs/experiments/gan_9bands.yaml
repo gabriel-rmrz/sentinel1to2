@@ -1,0 +1,45 @@
+run:
+  seed: 42
+  name: "gan"   # auto-generated
+
+#model:
+#  name: "UNet"
+#  parameters:
+#    in_channels: 4
+#    classes: 9
+model:
+  name: "SMP_UNet"
+  parameters:
+    encoder_name: "efficientnet-b0"
+    encoder_weights: "imagenet"
+    in_channels: 4
+
+training:
+  amp: true
+  n_epochs: 50
+  patience: 10
+
+  data:
+    train_dataset: "train_dataset_S2.h5"
+    val_dataset: "val_dataset_S2.h5"
+    batch_size: 128
+    n_workers:  64
+    prefetch_factor: 8
+    drop_last: True
+
+  optimizer:
+    name: "Adam"
+    parameters:
+      lr: 1e-4
+
+  gan:
+    mode: "pix2pix"
+
+  loss:
+    name: "CombinedLoss"
+    parameters:
+      alpha: 1.0
+      beta: 1.0
+      gamma: 0.1
+      rgb_indices: [6, 2, 1]   # optional (B7, green, blue style indices as in your codebase)
+

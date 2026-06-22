@@ -98,6 +98,8 @@ def inference_one_scene(
     )
 
     input_stack = np.concatenate([dsm, s1, wc], axis=0).astype(np.float32)
+    #input_stack = s1.astype(np.float32)
+    #input_stack = wc.astype(np.float32)
     logger.info(f"[{sample_type}] Scene={scene_folder} input_stack shape={input_stack.shape}")
 
     # Patch-wise inference (Gaussian blending supported)
