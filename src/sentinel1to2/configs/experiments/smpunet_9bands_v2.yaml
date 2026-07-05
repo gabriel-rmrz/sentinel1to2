@@ -16,7 +16,7 @@ model:
 
 training:
   amp: true
-  n_epochs: 5
+  n_epochs: 10
   patience: 4
 
   data:

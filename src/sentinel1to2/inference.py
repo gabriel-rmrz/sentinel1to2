@@ -97,9 +97,14 @@ def inference_one_scene(
         config, scene_folder, data_dir, mean, std
     )
 
-    input_stack = np.concatenate([dsm, s1, wc], axis=0).astype(np.float32)
-    #input_stack = s1.astype(np.float32)
-    #input_stack = wc.astype(np.float32)
+    
+    input_type = config["preprocessing"]["input_type"]
+    if input_type == "all":
+        input_stack = np.concatenate([dsm, s1, wc], axis=0).astype(np.float32)
+    if input_type == "sar":
+        input_stack = s1.astype(np.float32)
+    if input_type == "wc":
+        input_stack = wc.astype(np.float32)
     logger.info(f"[{sample_type}] Scene={scene_folder} input_stack shape={input_stack.shape}")
 
     # Patch-wise inference (Gaussian blending supported)

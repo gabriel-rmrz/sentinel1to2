@@ -13,6 +13,8 @@ run:
 preprocessing:
   patch_dimension: [128, 128]
   stride: 128        # training stride
+  input_type: 'sar' 
+
 
 
   # TRAIN input (used for preprocessing and val inference if needed)
@@ -48,5 +50,10 @@ evaluation:
   scenes_to_plot: 2
 
 performance:
+  wc_class_metrics: true
+  wc_min_pixels: 10
+  cc_class_metrics: true
+  cc_masks_dir: /lustre/icsc-oh-hpc/gabriel/data/masks
+  cc_min_pixels: 10
   bands_metric_names: ["mae", "psnr", "ssim", "sam", "ergas", "r2"]
   indices_metric_names: ["mae", "psnr", "ssim", "sam", "ergas","r2"]

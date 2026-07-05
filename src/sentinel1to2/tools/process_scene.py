@@ -102,17 +102,22 @@ def process_scene(
         input_patches = []
         target_patches = []
 
+        input_type = config["preprocessing"]["input_type"]
         for top, left in _iter_patch_coords(H, W, crop_size, stride):
-            x = np.concatenate(
-                [
-                    dsm[:, top : top + crop_size, left : left + crop_size],
-                    s1[:, top : top + crop_size, left : left + crop_size],
-                    worldcover[:, top : top + crop_size, left : left + crop_size],
-                ],
-                axis=0,
-            )
-            #x =  worldcover[:, top : top + crop_size, left : left + crop_size]
-            #x = s1[:, top : top + crop_size, left : left + crop_size]
+            
+            if input_type == "all":
+                x = np.concatenate(
+                    [
+                        dsm[:, top : top + crop_size, left : left + crop_size],
+                        s1[:, top : top + crop_size, left : left + crop_size],
+                        worldcover[:, top : top + crop_size, left : left + crop_size],
+                    ],
+                    axis=0,
+                )
+            if input_type == "sar":
+                x = s1[:, top : top + crop_size, left : left + crop_size]
+            if input_type == "wc":
+                x =  worldcover[:, top : top + crop_size, left : left + crop_size]
 
             y = target_arr[:, top : top + crop_size, left : left + crop_size]
 

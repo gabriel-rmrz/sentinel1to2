@@ -73,6 +73,29 @@ def spectral_angle_mapper(img_gt: np.ndarray, img_inf: np.ndarray, eps: float = 
     angles = np.arccos(cos_theta)
     return float(np.mean(angles))
 
+def spectral_angle_mapper_map(img_gt: np.ndarray, img_inf: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    """
+    Igual que spectral_angle_mapper pero devuelve el mapa (H, W) en lugar del mean.
+    """
+    gt  = _as_channel_first(img_gt)
+    inf = _as_channel_first(img_inf)
+
+    gt  = _nan_safe(gt)
+    inf = _nan_safe(inf)
+
+    C, H, W = gt.shape
+    gt2  = gt.reshape(C, -1).T    # (N, C)
+    inf2 = inf.reshape(C, -1).T   # (N, C)
+
+    dot      = np.sum(gt2 * inf2, axis=1)
+    norm_gt  = np.linalg.norm(gt2, axis=1)
+    norm_inf = np.linalg.norm(inf2, axis=1)
+
+    cos_theta = dot / (norm_gt * norm_inf + eps)
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+
+    return np.arccos(cos_theta).reshape(H, W)   # (H, W)
+
 # -----------------------------
 # ERGAS
 # -----------------------------
@@ -110,10 +133,71 @@ def ergas(img_gt: np.ndarray, img_inf: np.ndarray, ratio: float = 1.0, eps: floa
 # -----------------------------
 # Metrics
 # -----------------------------
-def compute_metrics(img_gt: np.ndarray, img_inf: np.ndarray, metric_names: Sequence[str]) -> List[float]:
+# ── Map versions (per-pixel, same input format as compute_metrics) ────────────
+
+def compute_metrics_map(img_gt: np.ndarray, img_inf: np.ndarray, metric_names: Sequence[str]) -> dict[str, np.ndarray]:
+    """
+    Compute per-pixel metric maps for (C,H,W) or (H,W) inputs.
+    Returns a dict {metric_name: map (H,W)} for each supported metric.
+    Unsupported metrics (ergas) return None.
+    """
+    gt  = _as_channel_first(_nan_safe(np.asarray(img_gt)))   # (C, H, W)
+    inf = _as_channel_first(_nan_safe(np.asarray(img_inf)))  # (C, H, W)
+    C, H, W = gt.shape
+
+    maps: dict[str, np.ndarray | None] = {}
+
+    for m in metric_names:
+        ml = m.lower()
+
+        if ml == "mae":
+            # mean over channels → (H, W)
+            maps[m] = np.mean(np.abs(inf - gt), axis=0)
+
+        elif ml == "psnr":
+            # per-pixel MSE → PSNR map (H, W)
+            mse_map = np.mean((inf - gt) ** 2, axis=0)          # (H, W)
+            data_range = 2.0
+            with np.errstate(divide="ignore"):
+                maps[m] = 10.0 * np.log10(data_range ** 2 / (mse_map + 1e-12))
+
+        elif ml == "r2":
+            # per-pixel R2 across channels (H, W)
+            gt2  = gt.reshape(C, -1).T    # (N, C)
+            inf2 = inf.reshape(C, -1).T
+            ss_res = np.sum((gt2 - inf2) ** 2, axis=1)
+            ss_tot = np.sum((gt2 - gt2.mean(axis=1, keepdims=True)) ** 2, axis=1)
+            r2_flat = 1.0 - ss_res / (ss_tot + 1e-12)
+            maps[m] = r2_flat.reshape(H, W)
+
+        elif ml == "ssim":
+            # one SSIM map per channel, then average over channels
+            ssim_channels = []
+            for c in range(C):
+                _, ssim_map = structural_similarity(
+                    gt[c], inf[c], data_range=2.0, full=True
+                )
+                ssim_channels.append(ssim_map)
+            maps[m] = np.mean(ssim_channels, axis=0)            # (H, W)
+
+        elif ml == "sam":
+            maps[m] = spectral_angle_mapper_map(gt, inf)        # (H, W)
+
+        elif ml == "ergas":
+            maps[m] = None
+
+        else:
+            raise ValueError(f"Unknown metric '{m}'")
+
+    return maps
+
+def compute_metrics(target_type: str, img_gt: np.ndarray, img_inf: np.ndarray, metric_names: Sequence[str]) -> List[float]:
     """
     Compute metrics for a single-channel (H,W) or multi-channel (C,H,W) image.
     """
+    data_range = 2.0
+    if target_type == "bands":
+        data_range = 1.0
     img_gt = _nan_safe(np.asarray(img_gt))
     img_inf = _nan_safe(np.asarray(img_inf))
 
@@ -131,18 +215,18 @@ def compute_metrics(img_gt: np.ndarray, img_inf: np.ndarray, metric_names: Seque
             continue
 
         if ml == "psnr":
-            out.append(float(peak_signal_noise_ratio(img_gt, img_inf, data_range=2.0)))
+            out.append(float(peak_signal_noise_ratio(img_gt, img_inf, data_range=data_range)))
             continue
 
         if ml == "ssim":
             if img_gt.ndim == 2:
-                ssim = structural_similarity(img_gt, img_inf, data_range=2.0)
+                ssim = structural_similarity(img_gt, img_inf, data_range=data_range)
             else:
                 # channel-first -> channel-last
                 ssim = structural_similarity(
                     np.moveaxis(img_gt, 0, -1),
                     np.moveaxis(img_inf, 0, -1),
-                    data_range=2.0,
+                    data_range=data_range,
                     channel_axis=-1,
                 )
             out.append(float(ssim))
@@ -169,6 +253,7 @@ def write_metrics_header(file: IO[str], name_col: str, metric_names: Sequence[st
 
 
 def write_per_channel_metrics(
+    target_type: str,
     file: IO[str],
     scene_name: str,
     gt: np.ndarray,
@@ -177,11 +262,7 @@ def write_per_channel_metrics(
     metric_names: Sequence[str],
     ndigits: int = 4,
 ) -> None:
-    """
-    Writes one row per channel: scene, channel_name, metrics...
-    This is what your old compute_all_metrics() did (but cleaner).
-    """
-    gt_cf = _as_channel_first(gt)
+    gt_cf   = _as_channel_first(gt)
     pred_cf = _as_channel_first(pred)
 
     if gt_cf.shape != pred_cf.shape:
@@ -191,10 +272,34 @@ def write_per_channel_metrics(
     if len(channel_names) != C:
         raise ValueError(f"channel_names length {len(channel_names)} != number of channels {C}")
 
-    for i in range(C):
-        vals = compute_metrics(gt_cf[i], pred_cf[i], metric_names)
-        file.write(",".join([scene_name, str(channel_names[i]), *[_fmt(v, ndigits) for v in vals]]) + "\n")
+    per_channel   = [m for m in metric_names if m.lower() not in ("ergas", "sam")]
+    ergas_enabled = any(m.lower() == "ergas" for m in metric_names)
+    sam_enabled_  = any(m.lower() == "sam"   for m in metric_names)
 
+    # ── per-channel rows: ergas and sam cells are empty ───────────────────────
+    for i in range(C):
+        computed = compute_metrics(target_type, gt_cf[i], pred_cf[i], per_channel)
+        val_iter = iter(computed)
+        ordered  = []
+        for m in metric_names:
+            if m.lower() in ("ergas", "sam"):
+                ordered.append("")
+            else:
+                ordered.append(_fmt(next(val_iter), ndigits))
+        file.write(",".join([scene_name, str(channel_names[i]), *ordered]) + "\n")
+
+    # ── all_bands row: only ergas and sam filled, other cells empty ───────────
+    if ergas_enabled or sam_enabled_:
+        ordered = []
+        for m in metric_names:
+            ml = m.lower()
+            if ml == "ergas":
+                ordered.append(_fmt(float(ergas(gt_cf, pred_cf)), ndigits))
+            elif ml == "sam":
+                ordered.append(_fmt(float(spectral_angle_mapper(gt_cf, pred_cf)), ndigits))
+            else:
+                ordered.append("")
+        file.write(",".join([scene_name, "all_bands", *ordered]) + "\n")
 
 def write_sam_header(file: IO[str]) -> None:
     file.write("scene,sam\n")

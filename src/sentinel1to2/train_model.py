@@ -128,59 +128,29 @@ def train_model(
             # -------------------------
             # pix2pix: Train Discriminator
             # -------------------------
-            optimizer_D.zero_grad(set_to_none=True)
-
-            with torch.no_grad():
-                fake = model(inputs)
-
-            real_pair = torch.cat([inputs, targets], dim=1)
-            fake_pair = torch.cat([inputs, fake], dim=1)
-
-            pred_real = discriminator(real_pair)
-            pred_fake = discriminator(fake_pair)
-
-            real_labels = torch.ones_like(pred_real)
-            fake_labels = torch.zeros_like(pred_fake)
-
-            loss_D_real = adv_criterion(pred_real, real_labels)
-            loss_D_fake = adv_criterion(pred_fake, fake_labels)
-            loss_D = 0.5 * (loss_D_real + loss_D_fake)
-
+            # ---- Train Discriminator ----
             optimizer_D.zero_grad(set_to_none=True)
             with torch.no_grad():
                 fake = model(inputs)
             
             real_pair = torch.cat([inputs, targets], dim=1)
-            fake_pair = torch.cat([inputs, fake], dim=1)
+            fake_pair = torch.cat([inputs, fake.detach()], dim=1)
             
             with autocast(device_type=device.type, enabled=use_amp):
                 pred_real = discriminator(real_pair)
                 pred_fake = discriminator(fake_pair)
-                loss_D_real = adv_criterion(pred_real, torch.ones_like(pred_real))
-                loss_D_fake = adv_criterion(pred_fake, torch.zeros_like(pred_fake))
-                loss_D = 0.5 * (loss_D_real + loss_D_fake)
+                loss_D = 0.5 * (
+                    adv_criterion(pred_real, torch.ones_like(pred_real)) +
+                    adv_criterion(pred_fake, torch.zeros_like(pred_fake))
+                )
             
             scaler.scale(loss_D).backward()
             scaler.step(optimizer_D)
             scaler.update()
-
-
-
-            # -------------------------
-            # pix2pix: Train Generator
-            # -------------------------
+            
+            # ---- Train Generator ----
             optimizer_G.zero_grad(set_to_none=True)
-            fake = model(inputs)
-
-            fake_pair = torch.cat([inputs, fake], dim=1)
-            pred_fake = discriminator(fake_pair)
-
-            adv_loss_G = adv_criterion(pred_fake, torch.ones_like(pred_fake))
-            recon_loss = criterion(fake, targets)
-
-            loss_G = lambda_adv * adv_loss_G + lambda_recon * recon_loss
-            optimizer_G.zero_grad(set_to_none=True)
-
+            
             with autocast(device_type=device.type, enabled=use_amp):
                 fake = model(inputs)
                 fake_pair = torch.cat([inputs, fake], dim=1)
@@ -192,9 +162,9 @@ def train_model(
             scaler.scale(loss_G).backward()
             scaler.step(optimizer_G)
             scaler.update()
-
-
+            
             epoch_train_losses.append(float(loss_G.item()))
+
 
         train_loss = float(np.mean(epoch_train_losses)) if epoch_train_losses else float("nan")
         train_losses.append(train_loss)
